@@ -136,6 +136,13 @@
   .sent-Neutral{color:var(--muted);}
 
   .link-row{display:flex; gap:8px; align-items:center; margin-top:4px;}
+
+  .settings-panel{margin-top:14px; display:none;}
+  .settings-panel.open{display:block;}
+  .settings-head{display:flex; justify-content:space-between; align-items:center;}
+  .settings-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(190px,1fr)); gap:9px 16px; margin-top:12px; font-size:0.84rem;}
+  .settings-grid label{display:flex; align-items:center; gap:7px; cursor:pointer;}
+  .settings-grid input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px;}
 </style>
 </head>
 <body>
@@ -143,8 +150,27 @@
   <div class="brand">
     <h1>Comps Terminal</h1>
     <span class="tag">live peer analysis</span>
+    <button type="button" class="btn-ghost" id="settingsToggleBtn" style="margin-left:auto;">⚙ Display settings</button>
   </div>
   <p class="sub">Type a ticker and it fetches live fundamentals automatically, suggests real industry peers, and ranks the group on growth, profitability and valuation. Your tracked list lives in this browser only, so you and anyone else with this link each build your own list.</p>
+
+  <section class="panel settings-panel" id="settingsPanel">
+    <div class="settings-head">
+      <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Display settings</h3>
+      <button type="button" class="btn-ghost" id="closeSettingsBtn">Done</button>
+    </div>
+    <p class="hint">Choose what shows on each card and group — this only changes your view, saved in this browser.</p>
+    <div class="settings-grid">
+      <label><input type="checkbox" id="setDesc"> Company description</label>
+      <label><input type="checkbox" id="setVerdict"> Fundamentals badge</label>
+      <label><input type="checkbox" id="setStats"> Growth/profitability/valuation stats</label>
+      <label><input type="checkbox" id="setSpark"> Revenue trend line</label>
+      <label><input type="checkbox" id="setHealth"> Financial health strip</label>
+      <label><input type="checkbox" id="setNews"> News button</label>
+      <label><input type="checkbox" id="setTable"> Ranking table</label>
+      <label><input type="checkbox" id="setGroupCharts"> Group charts</label>
+    </div>
+  </section>
 
   <div class="top-grid">
     <div class="panel">
@@ -186,7 +212,10 @@
   "use strict";
 
   var STORE_KEY = "comps_terminal_companies_v1";
-  var state = { docs: loadStore(), charts: {} };
+  var SETTINGS_KEY = "comps_terminal_settings_v1";
+  var BOOTSTRAPPED_KEY = "comps_terminal_bootstrapped_v1";
+  var DEFAULT_SETTINGS = { desc:true, verdict:true, stats:true, spark:true, health:true, news:true, table:true, groupCharts:true };
+  var state = { docs: loadStore(), charts: {}, settings: loadSettings() };
 
   function loadStore(){
     try { return JSON.parse(localStorage.getItem(STORE_KEY) || "[]"); } catch(e){ return []; }
@@ -194,6 +223,31 @@
   function saveStore(){
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state.docs)); } catch(e){}
   }
+  function loadSettings(){
+    try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")); }
+    catch(e){ return Object.assign({}, DEFAULT_SETTINGS); }
+  }
+  function saveSettings(){
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings)); } catch(e){}
+  }
+
+  // ---------- settings panel ----------
+  var settingCheckboxIds = { desc:"setDesc", verdict:"setVerdict", stats:"setStats", spark:"setSpark", health:"setHealth", news:"setNews", table:"setTable", groupCharts:"setGroupCharts" };
+  Object.keys(settingCheckboxIds).forEach(function(key){
+    var el = document.getElementById(settingCheckboxIds[key]);
+    el.checked = !!state.settings[key];
+    el.addEventListener("change", function(){
+      state.settings[key] = el.checked;
+      saveSettings();
+      render();
+    });
+  });
+  document.getElementById("settingsToggleBtn").addEventListener("click", function(){
+    document.getElementById("settingsPanel").classList.toggle("open");
+  });
+  document.getElementById("closeSettingsBtn").addEventListener("click", function(){
+    document.getElementById("settingsPanel").classList.remove("open");
+  });
 
   var fmt = {
     money: function(mm){
@@ -476,25 +530,27 @@
       html += '<section class="panel group-block">';
       html += '<div class="group-head"><h2>' + escapeHtml(key) + '</h2><span class="count-pill">' + scored.length + ' tracked' + (scored.length < 2 ? " · add a peer to rank" : "") + '</span></div>';
 
-      html += '<div class="tbl-wrap"><table><thead><tr>' +
-        '<th>#</th><th>Company</th><th class="num-cell">Rev Growth</th><th class="num-cell">Net Margin</th>' +
-        '<th class="num-cell">P/E</th><th class="num-cell">EV/EBITDA</th><th class="num-cell">Composite</th><th></th>' +
-        '</tr></thead><tbody>';
-      scored.forEach(function(c, idx){
-        html += '<tr>' +
-          '<td class="rank-cell">' + (idx+1) + '</td>' +
-          '<td class="name-cell">' + escapeHtml(c.name) + ' <span class="ticker-tag">' + escapeHtml(c.ticker) + '</span></td>' +
-          '<td class="num-cell">' + fmt.pct(c.revGrowth) + '</td>' +
-          '<td class="num-cell">' + fmt.pct(c.netMargin) + '</td>' +
-          '<td class="num-cell">' + fmt.mult(c.pe) + '</td>' +
-          '<td class="num-cell">' + fmt.mult(c.evEbitda) + '</td>' +
-          '<td class="num-cell"><span class="score-pill ' + scoreClass(c.composite) + '">' + fmt.score(c.composite) + '</span></td>' +
-          '<td class="num-cell"><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '" title="Remove">✕</button></td>' +
-          '</tr>';
-      });
-      html += '</tbody></table></div>';
+      if (state.settings.table){
+        html += '<div class="tbl-wrap"><table><thead><tr>' +
+          '<th>#</th><th>Company</th><th class="num-cell">Rev Growth</th><th class="num-cell">Net Margin</th>' +
+          '<th class="num-cell">P/E</th><th class="num-cell">EV/EBITDA</th><th class="num-cell">Composite</th><th></th>' +
+          '</tr></thead><tbody>';
+        scored.forEach(function(c, idx){
+          html += '<tr>' +
+            '<td class="rank-cell">' + (idx+1) + '</td>' +
+            '<td class="name-cell">' + escapeHtml(c.name) + ' <span class="ticker-tag">' + escapeHtml(c.ticker) + '</span></td>' +
+            '<td class="num-cell">' + fmt.pct(c.revGrowth) + '</td>' +
+            '<td class="num-cell">' + fmt.pct(c.netMargin) + '</td>' +
+            '<td class="num-cell">' + fmt.mult(c.pe) + '</td>' +
+            '<td class="num-cell">' + fmt.mult(c.evEbitda) + '</td>' +
+            '<td class="num-cell"><span class="score-pill ' + scoreClass(c.composite) + '">' + fmt.score(c.composite) + '</span></td>' +
+            '<td class="num-cell"><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '" title="Remove">✕</button></td>' +
+            '</tr>';
+        });
+        html += '</tbody></table></div>';
+      }
 
-      if (scored.length >= 2){
+      if (state.settings.groupCharts && scored.length >= 2){
         html += '<div class="charts">' +
           '<div class="chart-box"><h3>Composite score</h3><canvas id="bar-' + safeId(key) + '"></canvas></div>' +
           '<div class="chart-box"><h3>Growth vs. profitability</h3><canvas id="scatter-' + safeId(key) + '"></canvas></div>' +
@@ -515,33 +571,43 @@
         html += '<div class="card">' +
           '<div class="card-top"><div class="card-name-row">' + logoImg + '<div><div class="card-name">' + escapeHtml(c.name) + '</div><div class="card-ticker">' + escapeHtml(c.ticker) + '</div></div></div><div class="card-price">' + fmt.price(c.price) + '</div></div>';
 
-        if (c.description){
+        if (state.settings.desc && c.description){
           html += '<div class="card-desc" title="' + escapeHtml(c.description) + '">' + escapeHtml(c.description) + '</div>';
         }
 
-        html += '<span class="verdict-pill verdict-' + verdict.band + '" title="' + escapeHtml(checklist) + (verdict.total ? ' (' + verdict.passed + '/' + verdict.total + ' checks passed)' : '') + '">' + escapeHtml(verdict.label) + (verdict.total ? ' ' + verdict.passed + '/' + verdict.total : '') + '</span>';
+        if (state.settings.verdict){
+          html += '<span class="verdict-pill verdict-' + verdict.band + '" title="' + escapeHtml(checklist) + (verdict.total ? ' (' + verdict.passed + '/' + verdict.total + ' checks passed)' : '') + '">' + escapeHtml(verdict.label) + (verdict.total ? ' ' + verdict.passed + '/' + verdict.total : '') + '</span>';
+        }
 
-        html += '<div class="card-stats">' +
-          '<div><span class="k">Mkt Cap</span>' + fmt.money(c.marketCap) + '</div>' +
-          '<div><span class="k">Growth</span>' + fmt.score(c.growthScore) + '</div>' +
-          '<div><span class="k">Profitability</span>' + fmt.score(c.profitScore) + '</div>' +
-          '<div><span class="k">Valuation</span>' + fmt.score(c.valueScore) + '</div>' +
-          '</div>';
+        if (state.settings.stats){
+          html += '<div class="card-stats">' +
+            '<div><span class="k">Mkt Cap</span>' + fmt.money(c.marketCap) + '</div>' +
+            '<div><span class="k">Growth</span>' + fmt.score(c.growthScore) + '</div>' +
+            '<div><span class="k">Profitability</span>' + fmt.score(c.profitScore) + '</div>' +
+            '<div><span class="k">Valuation</span>' + fmt.score(c.valueScore) + '</div>' +
+            '</div>';
+        }
 
-        if (c.history && c.history.length >= 2){
+        if (state.settings.spark && c.history && c.history.length >= 2){
           html += '<canvas class="sparkline" id="spark-' + escapeHtml(c.ticker) + '"></canvas>';
         }
 
-        html += '<div class="health-strip">' +
-          '<div><span class="k">Current ratio</span>' + (health.currentRatio == null ? "—" : health.currentRatio.toFixed(2) + "x") + '</div>' +
-          '<div><span class="k">Debt/equity</span>' + (health.debtToEquity == null ? "—" : (health.debtToEquity === Infinity ? "n/m" : health.debtToEquity.toFixed(2) + "x")) + '</div>' +
-          '<div><span class="k">Free cash flow</span>' + fmt.money(health.fcf) + '</div>' +
-          '<div><span class="k">Data source</span>' + sourceLabel + '</div>' +
-          (health.runwayMonths != null ? '<div class="runway">Burning cash — ~' + Math.round(health.runwayMonths) + ' months of runway at current pace</div>' : '') +
-          '</div>';
+        if (state.settings.health){
+          html += '<div class="health-strip">' +
+            '<div><span class="k">Current ratio</span>' + (health.currentRatio == null ? "—" : health.currentRatio.toFixed(2) + "x") + '</div>' +
+            '<div><span class="k">Debt/equity</span>' + (health.debtToEquity == null ? "—" : (health.debtToEquity === Infinity ? "n/m" : health.debtToEquity.toFixed(2) + "x")) + '</div>' +
+            '<div><span class="k">Free cash flow</span>' + fmt.money(health.fcf) + '</div>' +
+            '<div><span class="k">Data source</span>' + sourceLabel + '</div>' +
+            (health.runwayMonths != null ? '<div class="runway">Burning cash — ~' + Math.round(health.runwayMonths) + ' months of runway at current pace</div>' : '') +
+            '</div>';
+        }
 
-        html += '<button type="button" class="news-toggle" data-news="' + escapeHtml(c.ticker) + '">Load recent news ▾</button>' +
-          '<div class="news-list" id="news-' + escapeHtml(c.ticker) + '" hidden></div>';
+        if (state.settings.news){
+          html += '<button type="button" class="news-toggle" data-news="' + escapeHtml(c.ticker) + '">Load recent news ▾</button>' +
+            '<div class="news-list" id="news-' + escapeHtml(c.ticker) + '" hidden></div>';
+        }
+
+        html += '<div class="card-actions"><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '" title="Remove">Remove ✕</button></div>';
 
         html += '</div>';
       });
@@ -667,8 +733,43 @@
     setStatus("Live — " + state.docs.length + " tracked", "var(--good)");
   }
 
+  // ---------- first-visit population: today's top market movers ----------
+  async function bootstrapFromMovers(){
+    var already = false;
+    try { already = localStorage.getItem(BOOTSTRAPPED_KEY) === "1"; } catch(e){}
+    if (already || state.docs.length) return;
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("tickers")) return; // a shared link takes priority
+
+    setStatus("Loading today's market movers…", "var(--accent)", true);
+    try {
+      var res = await fetch("/api/movers");
+      var json = await res.json();
+      if (!res.ok) throw new Error(json.error || ("HTTP " + res.status));
+      var tickers = json.tickers || [];
+      if (!tickers.length){ setStatus("Ready", "var(--good)"); return; }
+      for (var i = 0; i < tickers.length; i++){
+        try {
+          var doc = await fetchTicker(tickers[i]);
+          upsertDoc(doc);
+          render();
+        } catch (err) {
+          // one mover failing shouldn't block the rest
+        }
+      }
+      showToast("Populated with today's top movers — remove any you don't want, or add your own.");
+      setStatus("Live — " + state.docs.length + " tracked", "var(--good)");
+    } catch (err) {
+      setStatus("Ready", "var(--good)");
+    } finally {
+      try { localStorage.setItem(BOOTSTRAPPED_KEY, "1"); } catch(e){}
+    }
+  }
+
   render();
-  bootstrapFromUrl();
+  bootstrapFromUrl().then(function(){
+    return bootstrapFromMovers();
+  });
 })();
 </script>
 </body>

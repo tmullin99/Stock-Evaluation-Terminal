@@ -16,6 +16,9 @@ no Claude account needed on the other end.
   as a fallback for whatever FMP's free tier doesn't cover (mostly small caps)
 - `api/news.js` — fetches recent news + sentiment for one ticker, called only
   when you click "Load recent news" on a card (keeps API usage low)
+- `api/movers.js` — fetches today's top gaining tickers, used once to
+  populate the dashboard on a visitor's very first visit (empty browser, no
+  shared link)
 
 ## 1. Get your API keys
 
@@ -78,6 +81,16 @@ Everything you track is saved in *your* browser's local storage — this app
 has no shared server-side database. Use "Copy shareable link" to bake your
 current tickers into a URL; anyone who opens it gets those same tickers
 fetched fresh into their own browser.
+
+**Display settings** (the ⚙ button, top right) let you show or hide each
+section — description, fundamentals badge, stats, revenue trend, health
+strip, news button, the ranking table, and the group charts — per your own
+browser. Nothing here changes the data, only what's shown.
+
+**First visit:** if your browser has nothing tracked yet and you didn't open
+a shared link, the dashboard auto-populates with today's top 5 market movers
+(via Alpha Vantage) so it's never empty. This only happens once per browser
+— remove any of them, and they won't come back on your next visit.
 
 ## Notes on the data
 
