@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/company.js": {
+      "maxDuration": 10
+    }
+  }
+}
