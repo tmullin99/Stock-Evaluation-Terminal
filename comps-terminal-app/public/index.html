@@ -103,10 +103,39 @@
   .empty{border:1px dashed var(--border); border-radius:14px; padding:34px 20px; text-align:center; color:var(--muted); margin-top:20px;}
   .empty strong{color:var(--fg); display:block; font-family:var(--font-display); font-size:1.05rem; margin-bottom:6px;}
 
-  footer{margin-top:30px; font-size:0.74rem; color:var(--muted); border-top:1px solid var(--border); padding-top:12px;}
+  footer{margin-top:30px; font-size:0.74rem; color:var(--muted); border-top:1px solid var(--border); padding-top:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
   .status-dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle;}
   .spin{display:inline-block; width:11px; height:11px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  .card-logo{width:28px; height:28px; border-radius:7px; object-fit:contain; background:var(--surface-2); border:1px solid var(--border); flex-shrink:0;}
+  .card-name-row{display:flex; align-items:center; gap:8px;}
+  .card-desc{font-size:0.74rem; color:var(--muted); line-height:1.4; max-height:2.8em; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+  .source-note{font-family:var(--font-mono); font-size:0.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+
+  .verdict-pill{display:inline-flex; align-items:center; gap:4px; font-size:0.72rem; font-weight:600; padding:3px 9px; border-radius:999px; cursor:help; width:fit-content;}
+  .verdict-strong{background:rgba(30,142,90,.15); color:var(--good);}
+  .verdict-mixed{background:rgba(185,119,14,.15); color:var(--warn);}
+  .verdict-weak{background:rgba(192,57,43,.15); color:var(--bad);}
+  .verdict-na{background:var(--surface-2); color:var(--muted);}
+
+  .health-strip{display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; font-family:var(--font-mono); font-size:0.72rem; border-top:1px dashed var(--border); padding-top:7px; margin-top:2px;}
+  .health-strip .k{color:var(--muted); display:block; font-family:var(--font-body); font-size:0.66rem;}
+  .health-strip .runway{grid-column:1 / -1; color:var(--warn);}
+
+  .sparkline{width:100%; height:34px; margin-top:2px;}
+
+  .news-toggle{font-size:0.72rem; background:none; border:none; color:var(--accent); padding:2px 0; text-align:left; cursor:pointer; font-weight:600;}
+  .news-list{display:flex; flex-direction:column; gap:6px; margin-top:2px;}
+  .news-item{border-top:1px solid var(--border); padding-top:6px;}
+  .news-item a{color:var(--fg); font-size:0.76rem; font-weight:600; text-decoration:none; line-height:1.3; display:block;}
+  .news-item a:hover{color:var(--accent);}
+  .news-meta{font-family:var(--font-mono); font-size:0.64rem; color:var(--muted); margin-top:2px;}
+  .sent-Bullish, .sent-Somewhat-Bullish{color:var(--good);}
+  .sent-Bearish, .sent-Somewhat-Bearish{color:var(--bad);}
+  .sent-Neutral{color:var(--muted);}
+
+  .link-row{display:flex; gap:8px; align-items:center; margin-top:4px;}
 </style>
 </head>
 <body>
@@ -137,14 +166,18 @@
       </form>
       <div id="peerSuggest" class="peer-suggest"></div>
       <div class="toast" id="toast"></div>
-      <p class="hint">Fetches live from Financial Modeling Prep the moment you submit.</p>
+      <div class="link-row">
+        <button type="button" class="btn-ghost" id="copyLinkBtn">Copy shareable link</button>
+        <p class="hint" style="margin:0;">Bakes your current tickers into the URL so opening it re-fetches the same set.</p>
+      </div>
     </div>
   </div>
 
   <div id="groupsRoot" class="groups"></div>
 
   <footer id="footer">
-    <span class="status-dot" id="statusDot" style="background:var(--good);"></span><span id="statusText">Ready</span>
+    <span><span class="status-dot" id="statusDot" style="background:var(--good);"></span><span id="statusText">Ready</span></span>
+    <span>Data: Financial Modeling Prep, with Alpha Vantage as fallback for small caps. Not investment advice.</span>
   </footer>
 </div>
 
@@ -287,6 +320,40 @@
     if (v >= 66) return "score-good";
     if (v >= 33) return "score-warn";
     return "score-bad";
+  }
+
+  // ---------- fundamentals scorecard (company-level, not peer-relative) ----------
+  // A factual pass/fail checklist against fixed thresholds -- not a buy/sell call.
+  function computeHealth(c){
+    var currentRatio = (c.currentAssets != null && c.currentLiabilities > 0) ? c.currentAssets / c.currentLiabilities : null;
+    var debtToEquity = null;
+    if (c.totalEquity != null){
+      debtToEquity = c.totalEquity > 0 ? (c.debt || 0) / c.totalEquity : Infinity;
+    }
+    var burnMonthly = (c.operatingCashFlow != null && c.operatingCashFlow < 0) ? Math.abs(c.operatingCashFlow) / 12 : null;
+    var runwayMonths = (burnMonthly && c.cash != null) ? c.cash / burnMonthly : null;
+    return { currentRatio: currentRatio, debtToEquity: debtToEquity, fcf: c.freeCashFlow, runwayMonths: runwayMonths };
+  }
+
+  function computeVerdict(scored, health){
+    var checks = [
+      { label: "Revenue growing", value: scored.revGrowth == null ? null : scored.revGrowth > 0 },
+      { label: "Net margin positive", value: scored.netMargin == null ? null : scored.netMargin > 0 },
+      { label: "Operating margin positive", value: scored.opMargin == null ? null : scored.opMargin > 0 },
+      { label: "Free cash flow positive", value: health.fcf == null ? null : health.fcf > 0 },
+      { label: "Current ratio above 1", value: health.currentRatio == null ? null : health.currentRatio > 1 },
+      { label: "Debt/equity under 2x", value: health.debtToEquity == null ? null : health.debtToEquity < 2 },
+      { label: "P/E under 40 (meaningful earnings)", value: scored.pe == null ? false : scored.pe < 40 },
+    ];
+    var known = checks.filter(function(c){ return c.value !== null; });
+    if (known.length < 3){
+      return { band: "na", label: "Not enough data", checks: checks, passed: null, total: null };
+    }
+    var passed = known.filter(function(c){ return c.value === true; }).length;
+    var ratio = passed / known.length;
+    var band = ratio >= 0.75 ? "strong" : (ratio >= 0.4 ? "mixed" : "weak");
+    var label = band === "strong" ? "Strong fundamentals" : (band === "mixed" ? "Mixed fundamentals" : "Weak fundamentals");
+    return { band: band, label: label, checks: checks, passed: passed, total: known.length };
   }
 
   // ---------- fetch ----------
@@ -436,13 +503,47 @@
 
       html += '<div class="cards">';
       scored.forEach(function(c){
-        html += '<div class="card"><div class="card-top"><div><div class="card-name">' + escapeHtml(c.name) + '</div><div class="card-ticker">' + escapeHtml(c.ticker) + '</div></div><div class="card-price">' + fmt.price(c.price) + '</div></div>' +
-          '<div class="card-stats">' +
+        var health = computeHealth(c);
+        var verdict = computeVerdict(c, health);
+        var checklist = verdict.checks.map(function(chk){
+          var mark = chk.value === null ? "n/a" : (chk.value ? "pass" : "fail");
+          return chk.label + ": " + mark;
+        }).join(" · ");
+        var logoImg = c.logo ? '<img class="card-logo" src="' + escapeHtml(c.logo) + '" alt="" onerror="this.style.display=\'none\'">' : "";
+        var sourceLabel = (c.dataSource && (c.dataSource.financials === "alphavantage" || c.dataSource.quote === "alphavantage")) ? "Alpha Vantage fallback used" : "Financial Modeling Prep";
+
+        html += '<div class="card">' +
+          '<div class="card-top"><div class="card-name-row">' + logoImg + '<div><div class="card-name">' + escapeHtml(c.name) + '</div><div class="card-ticker">' + escapeHtml(c.ticker) + '</div></div></div><div class="card-price">' + fmt.price(c.price) + '</div></div>';
+
+        if (c.description){
+          html += '<div class="card-desc" title="' + escapeHtml(c.description) + '">' + escapeHtml(c.description) + '</div>';
+        }
+
+        html += '<span class="verdict-pill verdict-' + verdict.band + '" title="' + escapeHtml(checklist) + (verdict.total ? ' (' + verdict.passed + '/' + verdict.total + ' checks passed)' : '') + '">' + escapeHtml(verdict.label) + (verdict.total ? ' ' + verdict.passed + '/' + verdict.total : '') + '</span>';
+
+        html += '<div class="card-stats">' +
           '<div><span class="k">Mkt Cap</span>' + fmt.money(c.marketCap) + '</div>' +
           '<div><span class="k">Growth</span>' + fmt.score(c.growthScore) + '</div>' +
           '<div><span class="k">Profitability</span>' + fmt.score(c.profitScore) + '</div>' +
           '<div><span class="k">Valuation</span>' + fmt.score(c.valueScore) + '</div>' +
-          '</div></div>';
+          '</div>';
+
+        if (c.history && c.history.length >= 2){
+          html += '<canvas class="sparkline" id="spark-' + escapeHtml(c.ticker) + '"></canvas>';
+        }
+
+        html += '<div class="health-strip">' +
+          '<div><span class="k">Current ratio</span>' + (health.currentRatio == null ? "—" : health.currentRatio.toFixed(2) + "x") + '</div>' +
+          '<div><span class="k">Debt/equity</span>' + (health.debtToEquity == null ? "—" : (health.debtToEquity === Infinity ? "n/m" : health.debtToEquity.toFixed(2) + "x")) + '</div>' +
+          '<div><span class="k">Free cash flow</span>' + fmt.money(health.fcf) + '</div>' +
+          '<div><span class="k">Data source</span>' + sourceLabel + '</div>' +
+          (health.runwayMonths != null ? '<div class="runway">Burning cash — ~' + Math.round(health.runwayMonths) + ' months of runway at current pace</div>' : '') +
+          '</div>';
+
+        html += '<button type="button" class="news-toggle" data-news="' + escapeHtml(c.ticker) + '">Load recent news ▾</button>' +
+          '<div class="news-list" id="news-' + escapeHtml(c.ticker) + '" hidden></div>';
+
+        html += '</div>';
       });
       html += '</div></section>';
     });
@@ -451,6 +552,9 @@
 
     root.querySelectorAll("[data-remove]").forEach(function(btn){
       btn.addEventListener("click", function(){ removeTicker(btn.getAttribute("data-remove")); });
+    });
+    root.querySelectorAll("[data-news]").forEach(function(btn){
+      btn.addEventListener("click", function(){ toggleNews(btn.getAttribute("data-news"), btn); });
     });
 
     Object.keys(groups).forEach(function(key){
@@ -479,10 +583,92 @@
                      y:{title:{display:true,text:"Profitability score",color:colors.muted}, min:0,max:100, ticks:{color:colors.muted}, grid:{color:colors.border}} } }
         });
       }
+      scored.forEach(function(c){
+        if (!c.history || c.history.length < 2) return;
+        var canvas = document.getElementById("spark-" + c.ticker);
+        if (!canvas) return;
+        state.charts["spark-"+c.ticker] = new Chart(canvas, {
+          type: "line",
+          data: { labels: c.history.map(function(h){ return h.year; }),
+            datasets: [{ data: c.history.map(function(h){ return h.revenue; }), borderColor: colors.accent, backgroundColor: "transparent", borderWidth: 2, pointRadius: 0, tension: 0.3 }] },
+          options: { plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title: function(items){ return "Revenue, " + items[0].label; }, label: function(ctx){ return fmt.money(ctx.parsed.y); } } } },
+            scales:{ x:{display:false}, y:{display:false} }, elements:{point:{radius:0}} }
+        });
+      });
     });
   }
 
+  // ---------- news (on-demand, to conserve Alpha Vantage's daily quota) ----------
+  var newsCache = {};
+  async function toggleNews(ticker, btn){
+    var box = document.getElementById("news-" + ticker);
+    if (!box) return;
+    if (!box.hidden){ box.hidden = true; btn.textContent = "Load recent news ▾"; return; }
+    if (newsCache[ticker]){
+      box.hidden = false; btn.textContent = "Hide news ▴";
+      return;
+    }
+    btn.textContent = "Loading…";
+    btn.disabled = true;
+    try {
+      var res = await fetch("/api/news?ticker=" + encodeURIComponent(ticker));
+      var json = await res.json();
+      if (!res.ok) throw new Error(json.error || ("HTTP " + res.status));
+      newsCache[ticker] = json.items || [];
+      if (!newsCache[ticker].length){
+        box.innerHTML = '<p class="hint">No recent news found.</p>';
+      } else {
+        box.innerHTML = newsCache[ticker].map(function(item){
+          var sentClass = "sent-" + String(item.sentimentLabel || "Neutral").replace(/\s+/g, "-");
+          return '<div class="news-item"><a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener">' + escapeHtml(item.title) + '</a>' +
+            '<div class="news-meta">' + escapeHtml(item.source || "") + ' · <span class="' + sentClass + '">' + escapeHtml(item.sentimentLabel || "") + '</span></div></div>';
+        }).join("");
+      }
+      box.hidden = false;
+      btn.textContent = "Hide news ▴";
+    } catch (err) {
+      showToast("Couldn't load news for " + ticker + ": " + err.message, true);
+      btn.textContent = "Load recent news ▾";
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- shareable link ----------
+  document.getElementById("copyLinkBtn").addEventListener("click", async function(){
+    var tickers = state.docs.map(function(d){ return d.ticker; });
+    if (!tickers.length){ showToast("Track at least one company first."); return; }
+    var url = window.location.origin + window.location.pathname + "?tickers=" + tickers.join(",");
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied — anyone who opens it gets these " + tickers.length + " tickers fetched fresh.");
+    } catch (e) {
+      showToast(url);
+    }
+  });
+
+  async function bootstrapFromUrl(){
+    var params = new URLSearchParams(window.location.search);
+    var list = (params.get("tickers") || "").split(",").map(function(t){ return t.trim().toUpperCase(); }).filter(Boolean);
+    if (!list.length) return;
+    var already = new Set(state.docs.map(function(d){ return d.ticker; }));
+    var toFetch = list.filter(function(t){ return !already.has(t); });
+    if (!toFetch.length) return;
+    setStatus("Loading " + toFetch.length + " shared ticker(s)…", "var(--accent)", true);
+    for (var i = 0; i < toFetch.length; i++){
+      try {
+        var doc = await fetchTicker(toFetch[i]);
+        upsertDoc(doc);
+        render();
+      } catch (err) {
+        showToast("Couldn't load shared ticker " + toFetch[i] + ": " + err.message, true);
+      }
+    }
+    setStatus("Live — " + state.docs.length + " tracked", "var(--good)");
+  }
+
   render();
+  bootstrapFromUrl();
 })();
 </script>
 </body>
