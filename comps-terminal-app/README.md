@@ -1,8 +1,10 @@
 # Comps Terminal
 
-A live stock peer-comps dashboard. Type a ticker, it fetches real fundamentals
+A live stock peer-comps dashboard styled after a Bloomberg terminal — black
+background, amber monospace type, sharp corners, and a scrolling ticker tape
+of whatever you're tracking. Type a ticker, it fetches real fundamentals
 server-side, suggests real industry peers, ranks the group on growth,
-profitability and valuation with adjustable weights, and now also shows a
+profitability and valuation with adjustable weights, and also shows a
 fundamentals scorecard, financial-health checks, a multi-year revenue trend,
 and recent news per company.
 
@@ -91,6 +93,10 @@ browser. Nothing here changes the data, only what's shown.
 a shared link, the dashboard auto-populates with today's top 5 market movers
 (via Alpha Vantage) so it's never empty. This only happens once per browser
 — remove any of them, and they won't come back on your next visit.
+
+**Ticker tape:** the amber strip across the very top scrolls every company
+you're tracking with its live price and daily % change (green up, red down).
+It fills in automatically as you add tickers — nothing to configure.
 
 ## Notes on the data
 

@@ -148,6 +148,11 @@ module.exports = async function handler(req, res) {
 
     var price = num(pick(quote, ["price"])) || num(pick(profile, ["price"])) ||
                 num(pick(avGlobalQuote, ["05. price"])) || num(pick(avOverview, ["AnalystTargetPrice"]));
+    var changePct = num(pick(quote, ["changePercentage"]));
+    if (changePct == null && avGlobalQuote) {
+      var avChangePct = pick(avGlobalQuote, ["10. change percent"]);
+      if (avChangePct) changePct = num(String(avChangePct).replace("%", ""));
+    }
     var sharesOut = num(pick(quote, ["sharesOutstanding"])) || num(pick(profile, ["sharesOutstanding", "shares"])) ||
                     num(pick(avOverview, ["SharesOutstanding"]));
     var marketCapRaw = num(pick(quote, ["marketCap"])) || num(pick(profile, ["mktCap", "marketCap"])) ||
@@ -221,6 +226,7 @@ module.exports = async function handler(req, res) {
       description: description,
       logo: logo,
       price: price,
+      changePct: changePct,
       shares: sharesMM,
       debt: mm(totalDebt),
       cash: mm(cash),
