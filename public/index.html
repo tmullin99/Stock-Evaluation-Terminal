@@ -3,210 +3,244 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Comps Terminal</title>
+<title>Comps Notebook</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
-  /* A deliberate single-theme terminal (not light/dark-adaptive), but the
-     six colors below are user-editable from Display settings -> Color
-     scheme. Panel/border/muted-text shades are derived from bg+fg with
-     color-mix() so any custom pick still looks coherent without needing a
-     dozen separate pickers. */
+  /* A warm, paper-and-ink reading theme, built for someone learning what
+     these numbers mean, not for a trading floor. Six colors are editable
+     from Display settings -> Color scheme; panel/border/muted shades
+     derive from bg+ink with color-mix() so any custom pick still reads as
+     one coherent theme. */
   :root{
-    --bg:#0B0E14; --fg:#D9DEE7; --accent:#4FA6D9; --accent-fg:#07131C;
-    --good:#3FCB8C; --warn:#E3B34E; --bad:#E2637C;
-    --surface: color-mix(in srgb, var(--bg) 92%, var(--fg) 8%);
-    --surface-2: color-mix(in srgb, var(--bg) 84%, var(--fg) 16%);
-    --border: color-mix(in srgb, var(--bg) 68%, var(--fg) 32%);
-    --muted: color-mix(in srgb, var(--fg) 55%, var(--bg) 45%);
-    --font-display:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
-    --font-body:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+    --bg:#F6F4EF; --ink:#242923; --accent:#1F6F54; --accent-fg:#FBFAF6;
+    --good:#1F6F54; --warn:#B4772A; --bad:#A6403D;
+    --surface: color-mix(in srgb, var(--bg) 40%, white 60%);
+    --surface-2: color-mix(in srgb, var(--bg) 78%, white 22%);
+    --border: color-mix(in srgb, var(--ink) 16%, var(--bg) 84%);
+    --muted: color-mix(in srgb, var(--ink) 58%, var(--bg) 42%);
+    --font-head:"Lora",Georgia,"Times New Roman",serif;
+    --font-body:"Inter",ui-sans-serif,system-ui,sans-serif;
     --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
-    color-scheme:dark;
+    color-scheme:light;
   }
   *{box-sizing:border-box;}
-  body{margin:0; background:var(--bg); color:var(--fg); font-family:var(--font-body); -webkit-font-smoothing:antialiased;}
-  .wrap{max-width:1240px; margin:0 auto; padding:0 14px 60px;}
-  h1,h2,h3{font-family:var(--font-display); margin:0;}
-  .brand{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding-top:14px;}
-  .brand h1{font-size:1.3rem; font-weight:800; letter-spacing:.02em; color:var(--accent); text-transform:uppercase;}
-  .brand .tag{font-family:var(--font-mono); font-size:0.68rem; color:var(--accent-fg); background:var(--accent); letter-spacing:.06em; padding:2px 8px; font-weight:700;}
-  .sub{color:var(--muted); font-size:0.78rem; margin-top:6px; max-width:680px; line-height:1.5;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:16px; line-height:1.55; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px; margin:0 auto; padding:0 20px 70px;}
+  h1,h2,h3{font-family:var(--font-head); margin:0; font-weight:600;}
+  a{color:var(--accent);}
 
-  .panel{background:var(--surface); border:1px solid var(--border); padding:14px 16px;}
-  .top-grid{display:grid; grid-template-columns: 1.1fr 1fr; gap:1px; margin-top:14px; background:var(--border);}
-  .top-grid > .panel{border:none;}
+  .brand{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-top:22px;}
+  .brand h1{font-size:1.5rem; color:var(--ink); font-weight:700;}
+  .brand .tag{font-family:var(--font-body); font-size:0.82rem; color:var(--muted); font-style:italic;}
+  .brand-actions{display:flex; gap:8px; margin-left:auto;}
+  .sub{color:var(--muted); font-size:0.98rem; margin-top:8px; max-width:62ch; line-height:1.6;}
+
+  .panel{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px;}
+  .top-grid{display:grid; grid-template-columns: 1.1fr 1fr; gap:14px; margin-top:16px;}
   @media (max-width:760px){ .top-grid{grid-template-columns:1fr;} }
 
-  .panel h3{font-size:0.72rem; text-transform:uppercase; letter-spacing:.1em; color:var(--accent); margin-bottom:10px; font-weight:700;}
+  .panel h3{font-size:0.95rem; font-family:var(--font-head); color:var(--ink); margin-bottom:12px; font-weight:600;}
 
-  .weights{display:flex; flex-direction:column; gap:10px;}
-  .weight-row{display:grid; grid-template-columns: 92px 1fr 46px; align-items:center; gap:10px;}
-  .weight-row label{font-size:0.72rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em;}
-  .weight-row output{font-family:var(--font-mono); font-size:0.82rem; text-align:right; color:var(--accent);}
+  .weights{display:flex; flex-direction:column; gap:12px;}
+  .weight-row{display:grid; grid-template-columns: 100px 1fr 46px; align-items:center; gap:10px;}
+  .weight-row label{font-size:0.85rem; color:var(--ink); font-weight:500;}
+  .weight-row output{font-family:var(--font-mono); font-size:0.85rem; text-align:right; color:var(--accent); font-weight:600;}
   input[type=range]{width:100%; accent-color:var(--accent);}
 
-  .add-form{display:flex; flex-direction:column; gap:8px;}
+  .add-form{display:flex; flex-direction:column; gap:10px;}
   .add-row{display:flex; gap:8px; flex-wrap:wrap;}
-  .add-row input{flex:1; min-width:120px; background:var(--surface-2); border:1px solid var(--border); color:var(--accent); padding:9px 11px; font-family:var(--font-mono); font-size:0.88rem; text-transform:uppercase;}
-  .add-row input:focus{outline:1px solid var(--accent); border-color:var(--accent);}
-  .add-row input::placeholder{font-family:var(--font-body); color:var(--muted); text-transform:none;}
-  button{font-family:var(--font-mono); font-weight:700; font-size:0.78rem; border-radius:0; border:1px solid var(--border); padding:9px 14px; cursor:pointer; text-transform:uppercase; letter-spacing:.05em; background:transparent; color:var(--fg);}
+  .add-row input{flex:1; min-width:120px; background:var(--surface-2); border:1px solid var(--border); border-radius:7px; color:var(--ink); padding:10px 12px; font-family:var(--font-body); font-size:0.95rem;}
+  .add-row input:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+  button{font-family:var(--font-body); font-weight:600; font-size:0.88rem; border-radius:7px; border:1px solid var(--border); padding:9px 15px; cursor:pointer; background:var(--surface); color:var(--ink);}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
   .btn-primary{background:var(--accent); color:var(--accent-fg); border-color:var(--accent);}
   .btn-primary:disabled{opacity:.5; cursor:default;}
   .btn-ghost{background:transparent; border:1px solid var(--border); color:var(--muted);}
   .btn-ghost:hover{border-color:var(--accent); color:var(--accent);}
-  .hint{font-size:0.72rem; color:var(--muted); line-height:1.4; margin:0;}
-  .toast{font-size:0.78rem; padding:8px 10px; background:var(--surface-2); border:1px solid var(--accent); color:var(--accent); display:none; font-family:var(--font-mono);}
+  .hint{font-size:0.85rem; color:var(--muted); line-height:1.5; margin:0;}
+  .toast{font-size:0.88rem; padding:10px 12px; background:var(--surface-2); border:1px solid var(--accent); border-radius:7px; color:var(--accent); display:none;}
   .toast.show{display:block;}
   .toast.err{border-color:var(--bad); color:var(--bad);}
 
-  .peer-suggest{display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;}
-  .peer-chip{font-family:var(--font-mono); font-size:0.72rem; border:1px solid var(--border); padding:3px 9px; background:var(--surface-2); color:var(--muted); cursor:pointer; text-transform:uppercase;}
+  .peer-suggest{display:flex; flex-wrap:wrap; gap:7px; margin-top:4px; align-items:center;}
+  .peer-chip{font-family:var(--font-body); font-size:0.83rem; font-weight:500; border:1px solid var(--border); border-radius:20px; padding:4px 12px; background:var(--surface-2); color:var(--ink); cursor:pointer;}
   .peer-chip:hover{border-color:var(--accent); color:var(--accent);}
 
-  .groups{display:flex; flex-direction:column; gap:1px; margin-top:14px; background:var(--border);}
-  .group-block{border:none !important;}
-  .group-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; border-bottom:2px solid var(--accent); padding-bottom:8px;}
-  .group-head h2{font-size:0.92rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--fg);}
-  .group-head h2::before{content:"▸ "; color:var(--accent);}
-  .count-pill{font-family:var(--font-mono); font-size:0.68rem; color:var(--muted); text-transform:uppercase;}
+  .groups{display:flex; flex-direction:column; gap:18px; margin-top:18px;}
+  .group-block{border-radius:10px;}
+  .group-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border);}
+  .group-head h2{font-size:1.1rem; color:var(--ink); font-weight:600;}
+  .count-pill{font-size:0.82rem; color:var(--muted);}
 
-  table{width:100%; border-collapse:collapse; font-size:0.8rem; font-family:var(--font-mono);}
-  thead th{text-align:left; font-size:0.66rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); background:var(--surface-2); font-weight:700; padding:6px 8px; border-bottom:1px solid var(--border);}
-  tbody td{padding:7px 8px; border-bottom:1px solid var(--border); white-space:nowrap;}
-  tbody td.name-cell{white-space:normal;}
-  tbody tr:nth-child(even){background:var(--surface-2);}
-  tbody tr:hover{background:#1B222E;}
+  table{width:100%; border-collapse:collapse; font-size:0.86rem;}
+  thead th{text-align:left; font-size:0.76rem; color:var(--muted); background:transparent; font-weight:600; padding:6px 8px; border-bottom:1px solid var(--border);}
+  tbody td{padding:9px 8px; border-bottom:1px solid var(--border); white-space:nowrap; font-family:var(--font-mono); font-size:0.84rem;}
+  tbody td.name-cell{white-space:normal; font-family:var(--font-body); font-size:0.88rem;}
   tbody tr:last-child td{border-bottom:none;}
   .num-cell{text-align:right; font-variant-numeric:tabular-nums;}
-  .rank-cell{font-weight:700; color:var(--accent);}
-  .ticker-tag{font-family:var(--font-mono); font-size:0.72rem; color:var(--muted);}
-  .tbl-wrap{overflow-x:auto; border:1px solid var(--border);}
-  .pending-row td{color:var(--muted); font-style:italic;}
-  .score-pill{display:inline-block; min-width:2.6em; text-align:right; padding:1px 6px; font-size:0.78rem; border:1px solid currentColor; font-weight:700;}
-  .score-good{color:var(--good);}
-  .score-warn{color:var(--warn);}
-  .score-bad{color:var(--bad);}
+  .rank-cell{font-weight:700; color:var(--accent); font-family:var(--font-mono);}
+  .ticker-tag{font-family:var(--font-mono); font-size:0.78rem; color:var(--muted);}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:8px; margin-top:6px;}
+  .tbl-wrap table{margin:0;}
+  .tbl-wrap thead th:first-child, .tbl-wrap tbody td:first-child{padding-left:12px;}
+  .score-pill{display:inline-block; min-width:2.6em; text-align:right; padding:2px 8px; font-size:0.82rem; border-radius:20px; font-weight:700; font-family:var(--font-mono);}
+  .score-good{background:color-mix(in srgb, var(--good) 16%, transparent); color:var(--good);}
+  .score-warn{background:color-mix(in srgb, var(--warn) 18%, transparent); color:var(--warn);}
+  .score-bad{background:color-mix(in srgb, var(--bad) 16%, transparent); color:var(--bad);}
 
-  .charts{display:grid; grid-template-columns:1.1fr 1fr; gap:1px; margin-top:14px; background:var(--border);}
+  .charts{display:grid; grid-template-columns:1.1fr 1fr; gap:14px; margin-top:16px;}
   @media (max-width:760px){ .charts{grid-template-columns:1fr;} }
-  .chart-box{background:var(--surface); border:none; padding:12px 14px 6px;}
-  .chart-box h3{font-size:0.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; font-weight:700;}
+  .chart-box{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px 8px;}
+  .chart-box h3{font-size:0.82rem; font-family:var(--font-body); color:var(--muted); margin-bottom:8px; font-weight:600;}
   .chart-box canvas{max-height:220px;}
 
-  .cards{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px,1fr)); gap:1px; margin-top:14px; background:var(--border);}
-  .card{background:var(--surface); border:none; padding:12px 13px; display:flex; flex-direction:column; gap:6px; min-width:0;}
-  .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:6px;}
-  .card-name{font-weight:700; font-size:0.82rem; line-height:1.25; text-transform:uppercase;}
-  .card-ticker{font-family:var(--font-mono); font-size:0.72rem; color:var(--accent);}
-  .card-price{font-family:var(--font-mono); font-size:0.95rem; font-weight:700; color:var(--good);}
-  .card-stats{display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; font-family:var(--font-mono); font-size:0.76rem; margin-top:4px;}
-  .card-stats .k{color:var(--muted); display:block; font-family:var(--font-body); font-size:0.64rem; text-transform:uppercase; letter-spacing:.04em;}
-  .card-actions{display:flex; justify-content:flex-end; gap:6px; margin-top:4px;}
-  .icon-btn{background:none; border:1px solid var(--border); color:var(--muted); font-size:0.68rem; padding:3px 8px; cursor:pointer; text-transform:uppercase; font-family:var(--font-mono);}
+  .cards{display:flex; flex-direction:column; gap:12px; margin-top:16px;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px; display:flex; flex-direction:column; gap:12px;}
+  .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .card-name{font-family:var(--font-head); font-weight:600; font-size:1.05rem; line-height:1.3; color:var(--ink);}
+  .card-ticker{font-family:var(--font-mono); font-size:0.78rem; color:var(--muted);}
+  .card-price{font-family:var(--font-mono); font-size:1.05rem; font-weight:700; color:var(--ink); text-align:right; flex-shrink:0;}
+  .card-chg{display:block; font-size:0.78rem; font-weight:600; text-align:right;}
+  .card-chg.up{color:var(--good);} .card-chg.down{color:var(--bad);}
+
+  .takeaway{font-family:var(--font-head); font-size:1.02rem; line-height:1.55; color:var(--ink); background:var(--surface-2); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:11px 14px;}
+
+  .card-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px 18px; font-size:0.86rem;}
+  .card-stats .k{color:var(--muted); display:block; font-size:0.74rem; margin-bottom:2px;}
+  .card-stats .v{font-family:var(--font-mono); font-weight:600; color:var(--ink);}
+  .card-actions{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:2px; flex-wrap:wrap;}
+  .icon-btn{background:none; border:1px solid var(--border); border-radius:7px; color:var(--muted); font-size:0.8rem; padding:5px 11px; cursor:pointer; font-family:var(--font-body); font-weight:500;}
   .icon-btn:hover{border-color:var(--bad); color:var(--bad);}
 
-  .empty{border:1px dashed var(--border); padding:34px 20px; text-align:center; color:var(--muted); margin-top:20px;}
-  .empty strong{color:var(--accent); display:block; font-family:var(--font-display); font-size:1.05rem; margin-bottom:6px; text-transform:uppercase;}
+  .empty{border:1px dashed var(--border); border-radius:10px; padding:38px 24px; text-align:center; color:var(--muted); margin-top:20px; background:var(--surface);}
+  .empty strong{color:var(--ink); display:block; font-family:var(--font-head); font-size:1.15rem; margin-bottom:8px; font-weight:600;}
 
-  footer{margin-top:30px; font-size:0.68rem; color:var(--muted); border-top:1px solid var(--border); padding:10px 0 20px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.03em;}
-  .status-dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; box-shadow:0 0 6px currentColor;}
+  footer{margin-top:36px; font-size:0.8rem; color:var(--muted); border-top:1px solid var(--border); padding:14px 0 24px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+  .status-dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle;}
   .spin{display:inline-block; width:11px; height:11px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
-  .card-logo{width:26px; height:26px; object-fit:contain; background:var(--surface-2); border:1px solid var(--border); flex-shrink:0; filter:grayscale(1) contrast(1.2);}
-  .card-name-row{display:flex; align-items:center; gap:8px;}
-  .card-desc{font-size:0.72rem; color:var(--muted); line-height:1.4; max-height:2.8em; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
-  .source-note{font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .card-logo{width:30px; height:30px; object-fit:contain; background:var(--surface-2); border:1px solid var(--border); border-radius:7px; flex-shrink:0; padding:3px;}
+  .card-name-row{display:flex; align-items:center; gap:10px;}
+  .card-desc{font-size:0.86rem; color:var(--muted); line-height:1.5;}
 
-  .verdict-pill{display:inline-flex; align-items:center; gap:4px; font-size:0.68rem; font-weight:700; padding:2px 7px; border:1px solid currentColor; cursor:help; width:fit-content; text-transform:uppercase; letter-spacing:.04em; font-family:var(--font-mono);}
-  .verdict-pill::before{content:"[ "; }
-  .verdict-pill::after{content:" ]"; }
-  .verdict-strong{color:var(--good);}
-  .verdict-mixed{color:var(--warn);}
-  .verdict-weak{color:var(--bad);}
-  .verdict-na{color:var(--muted);}
+  .verdict-pill{display:inline-flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:600; padding:4px 12px; border-radius:20px; cursor:pointer; width:fit-content; border:1px solid currentColor;}
+  .verdict-strong{color:var(--good); background:color-mix(in srgb, var(--good) 12%, transparent);}
+  .verdict-mixed{color:var(--warn); background:color-mix(in srgb, var(--warn) 14%, transparent);}
+  .verdict-weak{color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, transparent);}
+  .verdict-na{color:var(--muted); background:var(--surface-2);}
+  .checklist{display:none; flex-direction:column; gap:4px; font-size:0.84rem; margin-top:2px; padding:10px 12px; background:var(--surface-2); border-radius:8px;}
+  .checklist.open{display:flex;}
+  .check-row{display:flex; align-items:baseline; gap:8px;}
+  .check-mark{font-family:var(--font-mono); font-weight:700; width:1.1em; flex-shrink:0;}
+  .check-pass .check-mark{color:var(--good);}
+  .check-fail .check-mark{color:var(--bad);}
+  .check-na .check-mark{color:var(--muted);}
 
-  .health-strip{display:grid; grid-template-columns:1fr 1fr; gap:5px 10px; font-family:var(--font-mono); font-size:0.72rem; border-top:1px dashed var(--border); padding-top:7px; margin-top:2px;}
-  .health-strip .k{color:var(--muted); display:block; font-family:var(--font-body); font-size:0.64rem; text-transform:uppercase;}
-  .health-strip .runway{grid-column:1 / -1; color:var(--warn);}
+  .health-strip{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px 18px; font-size:0.86rem; border-top:1px solid var(--border); padding-top:12px;}
+  .health-strip .k{color:var(--muted); display:block; font-size:0.74rem; margin-bottom:2px;}
+  .health-strip .v{font-family:var(--font-mono); font-weight:600; color:var(--ink);}
+  .runway{grid-column:1 / -1; color:var(--warn); font-family:var(--font-body); font-weight:500; font-size:0.85rem;}
 
-  .sparkline{width:100%; height:34px; margin-top:2px;}
+  .sparkline{width:100%; height:38px;}
 
-  .news-toggle{font-size:0.68rem; background:none; border:1px solid var(--border); color:var(--accent); padding:3px 8px; text-align:left; cursor:pointer; font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-family:var(--font-mono); width:fit-content;}
+  .news-toggle{font-size:0.83rem; background:none; border:1px solid var(--border); border-radius:7px; color:var(--accent); padding:6px 12px; cursor:pointer; font-weight:600; width:fit-content;}
   .news-toggle:hover{border-color:var(--accent);}
-  .news-list{display:flex; flex-direction:column; gap:6px; margin-top:2px;}
-  .news-item{border-top:1px solid var(--border); padding-top:6px;}
-  .news-item a{color:var(--fg); font-size:0.74rem; font-weight:600; text-decoration:none; line-height:1.3; display:block;}
+  .news-list{display:flex; flex-direction:column; gap:10px; margin-top:2px;}
+  .news-item{border-top:1px solid var(--border); padding-top:8px;}
+  .news-item a{color:var(--ink); font-size:0.9rem; font-weight:600; text-decoration:none; line-height:1.4; display:block;}
   .news-item a:hover{color:var(--accent);}
-  .news-meta{font-family:var(--font-mono); font-size:0.62rem; color:var(--muted); margin-top:2px; text-transform:uppercase;}
+  .news-meta{font-size:0.78rem; color:var(--muted); margin-top:3px;}
   .sent-Bullish, .sent-Somewhat-Bullish{color:var(--good);}
   .sent-Bearish, .sent-Somewhat-Bearish{color:var(--bad);}
   .sent-Neutral{color:var(--muted);}
 
-  .link-row{display:flex; gap:8px; align-items:center; margin-top:4px;}
+  .link-row{display:flex; gap:10px; align-items:center; margin-top:2px; flex-wrap:wrap;}
 
-  .settings-panel{margin-top:14px; display:none;}
-  .settings-panel.open{display:block;}
+  /* term = a jargon word with a small "?" that opens the Learn panel */
+  .term-btn{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; border:1px solid var(--muted); color:var(--muted); background:none; font-size:0.65rem; font-weight:700; padding:0; cursor:pointer; margin-left:4px; vertical-align:middle; line-height:1;}
+  .term-btn:hover{border-color:var(--accent); color:var(--accent);}
+
+  .settings-panel, .learn-panel{margin-top:16px; display:none;}
+  .settings-panel.open, .learn-panel.open{display:block;}
   .settings-head{display:flex; justify-content:space-between; align-items:center;}
-  .settings-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px,1fr)); gap:9px 16px; margin-top:12px; font-size:0.78rem; text-transform:uppercase; letter-spacing:.03em;}
-  .settings-grid label{display:flex; align-items:center; gap:7px; cursor:pointer;}
-  .settings-grid input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px;}
+  .settings-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px,1fr)); gap:11px 18px; margin-top:14px; font-size:0.88rem;}
+  .settings-grid label{display:flex; align-items:center; gap:8px; cursor:pointer;}
+  .settings-grid input[type=checkbox]{accent-color:var(--accent); width:16px; height:16px;}
 
-  .settings-sub{margin-top:18px; padding-top:14px; border-top:1px dashed var(--border);}
-  .settings-sub h4{font-size:0.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; margin:0 0 8px;}
-  .preset-row{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px;}
-  .preset-btn{display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:0.7rem; text-transform:uppercase; letter-spacing:.03em; border:1px solid var(--border); background:var(--surface-2); color:var(--fg); padding:5px 10px; cursor:pointer;}
+  .settings-sub{margin-top:20px; padding-top:16px; border-top:1px solid var(--border);}
+  .settings-sub h4{font-size:0.95rem; font-family:var(--font-head); color:var(--ink); font-weight:600; margin:0 0 10px;}
+  .preset-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+  .preset-btn{display:flex; align-items:center; gap:7px; font-family:var(--font-body); font-size:0.82rem; font-weight:500; border:1px solid var(--border); border-radius:20px; background:var(--surface-2); color:var(--ink); padding:6px 13px; cursor:pointer;}
   .preset-btn:hover{border-color:var(--accent);}
-  .preset-btn.active{border-color:var(--accent); color:var(--accent);}
-  .preset-swatch{display:inline-block; width:11px; height:11px; border:1px solid rgba(255,255,255,.25); flex-shrink:0;}
-  .color-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px 16px;}
-  .color-field{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:0.72rem; text-transform:uppercase; letter-spacing:.03em; color:var(--muted);}
-  .color-field input[type=color]{width:34px; height:26px; padding:0; border:1px solid var(--border); background:none; cursor:pointer;}
-  .color-reset{margin-top:14px; font-size:0.7rem;}
+  .preset-btn.active{border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent);}
+  .preset-swatch{display:inline-block; width:12px; height:12px; border-radius:50%; border:1px solid rgba(0,0,0,.15); flex-shrink:0;}
+  .color-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:11px 18px;}
+  .color-field{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:0.84rem; color:var(--muted);}
+  .color-field input[type=color]{width:36px; height:28px; padding:0; border:1px solid var(--border); border-radius:6px; background:none; cursor:pointer;}
+  .color-reset{margin-top:16px; font-size:0.83rem;}
+
+  .glossary-list{display:flex; flex-direction:column; gap:14px; margin-top:14px;}
+  .glossary-item dt{font-family:var(--font-head); font-weight:600; font-size:0.98rem; color:var(--ink); scroll-margin-top:16px;}
+  .glossary-item dd{margin:4px 0 0; font-size:0.9rem; color:var(--muted); line-height:1.55;}
+  .glossary-item.flash{animation:flash-highlight 1.6s ease;}
+  @keyframes flash-highlight{ 0%,100%{background:transparent;} 20%{background:color-mix(in srgb, var(--accent) 16%, transparent);} }
 
   /* ---- ticker tape ---- */
-  .tape-wrap{background:var(--surface-2); overflow:hidden; white-space:nowrap; border-bottom:1px solid var(--border);}
-  .tape-track{display:inline-flex; align-items:center; animation:tape-scroll 42s linear infinite;}
+  .tape-wrap{background:var(--ink); overflow:hidden; white-space:nowrap;}
+  .tape-track{display:inline-flex; align-items:center; animation:tape-scroll 46s linear infinite;}
   .tape-wrap:hover .tape-track{animation-play-state:paused;}
   @media (prefers-reduced-motion: reduce){ .tape-track{animation:none;} }
   @keyframes tape-scroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
-  .tape-item{display:inline-flex; align-items:baseline; gap:6px; padding:6px 18px; font-family:var(--font-mono); font-size:0.76rem; font-weight:600; color:var(--muted); white-space:nowrap; border-right:1px solid var(--border);}
-  .tape-item .tt{font-weight:800; color:var(--fg);}
-  .tape-item .up{color:var(--good);}
-  .tape-item .down{color:var(--bad);}
-  .tape-empty{padding:7px 16px; font-family:var(--font-mono); font-size:0.72rem; font-weight:600; color:var(--muted);}
+  .tape-item{display:inline-flex; align-items:baseline; gap:7px; padding:7px 20px; font-family:var(--font-mono); font-size:0.78rem; font-weight:600; color:var(--bg); white-space:nowrap;}
+  .tape-item .tt{font-weight:700;}
+  .tape-item .up{color:#7FD9AE;}
+  .tape-item .down{color:#E39A98;}
+  .tape-empty{padding:8px 18px; font-family:var(--font-body); font-size:0.82rem; color:var(--bg); opacity:.75;}
 
-  /* ---- market snapshot (always visible, before you track anything) ---- */
-  .snapshot{margin-top:14px;}
+  /* ---- market snapshot ---- */
+  .snapshot{margin-top:16px;}
   .snapshot-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
-  .snapshot-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:1px; background:var(--border); border:1px solid var(--border);}
-  .snap-card{background:var(--surface); padding:10px 13px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .snapshot-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px,1fr)); gap:10px;}
+  .snap-card{background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:11px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
   .snap-id{display:flex; flex-direction:column; gap:2px; min-width:0;}
-  .snap-tt{font-family:var(--font-mono); font-weight:700; font-size:0.82rem; color:var(--fg);}
-  .snap-px{font-family:var(--font-mono); font-size:0.72rem; color:var(--muted);}
-  .snap-chg{font-family:var(--font-mono); font-size:0.82rem; font-weight:700; white-space:nowrap;}
-  .snap-add{background:none; border:1px solid var(--border); color:var(--muted); font-size:0.9rem; line-height:1; padding:4px 8px; cursor:pointer; flex-shrink:0;}
+  .snap-tt{font-family:var(--font-mono); font-weight:700; font-size:0.86rem; color:var(--ink);}
+  .snap-px{font-family:var(--font-mono); font-size:0.78rem; color:var(--muted);}
+  .snap-chg{font-family:var(--font-mono); font-size:0.84rem; font-weight:700; white-space:nowrap;}
+  .snap-chg.up{color:var(--good);} .snap-chg.down{color:var(--bad);}
+  .snap-add{background:none; border:1px solid var(--border); border-radius:50%; color:var(--muted); font-size:0.95rem; line-height:1; width:28px; height:28px; cursor:pointer; flex-shrink:0;}
   .snap-add:hover{border-color:var(--accent); color:var(--accent);}
   .snap-add:disabled{opacity:.4; cursor:default;}
 </style>
 </head>
 <body>
-<div class="tape-wrap"><div class="tape-track" id="tapeTrack"><span class="tape-empty">COMPS TERMINAL — TRACK A TICKER TO POPULATE THE TAPE —</span></div></div>
+<div class="tape-wrap"><div class="tape-track" id="tapeTrack"><span class="tape-empty">Comps Notebook — track a company below to fill this in —</span></div></div>
 <div class="wrap">
   <div class="brand">
-    <h1>Comps Terminal</h1>
-    <span class="tag">live peer analysis</span>
-    <button type="button" class="btn-ghost" id="settingsToggleBtn" style="margin-left:auto;">⚙ Display settings</button>
+    <h1>Comps Notebook</h1>
+    <span class="tag">a peer-comparison dashboard that explains itself</span>
+    <div class="brand-actions">
+      <button type="button" class="btn-ghost" id="learnToggleBtn">Learn the terms</button>
+      <button type="button" class="btn-ghost" id="settingsToggleBtn">Display settings</button>
+    </div>
   </div>
-  <p class="sub">Type a ticker and it fetches live fundamentals automatically, suggests real industry peers, and ranks the group on growth, profitability and valuation. Your tracked list lives in this browser only, so you and anyone else with this link each build your own list.</p>
+  <p class="sub">Type a ticker and it fetches live fundamentals, suggests real industry peers, and ranks the group on growth, profitability and valuation — with a plain-English read under every company, not just the raw numbers. Your tracked list lives in this browser only.</p>
+
+  <section class="panel learn-panel" id="learnPanel">
+    <div class="settings-head">
+      <h3>Learn the terms</h3>
+      <button type="button" class="btn-ghost" id="closeLearnBtn">Done</button>
+    </div>
+    <p class="hint">Every term used on this page, in plain English. Click the small circles next to any number to jump here.</p>
+    <dl class="glossary-list" id="glossaryList"></dl>
+  </section>
 
   <section class="panel settings-panel" id="settingsPanel">
     <div class="settings-head">
-      <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Display settings</h3>
+      <h3>Display settings</h3>
       <button type="button" class="btn-ghost" id="closeSettingsBtn">Done</button>
     </div>
     <p class="hint">Choose what shows on each card and group — this only changes your view, saved in this browser.</p>
@@ -215,7 +249,7 @@
       <label><input type="checkbox" id="setVerdict"> Fundamentals badge</label>
       <label><input type="checkbox" id="setStats"> Growth/profitability/valuation stats</label>
       <label><input type="checkbox" id="setSpark"> Revenue trend line</label>
-      <label><input type="checkbox" id="setHealth"> Financial health strip</label>
+      <label><input type="checkbox" id="setHealth"> Financial health details</label>
       <label><input type="checkbox" id="setNews"> News button</label>
       <label><input type="checkbox" id="setTable"> Ranking table</label>
       <label><input type="checkbox" id="setGroupCharts"> Group charts</label>
@@ -232,15 +266,15 @@
         <label class="color-field">Losses<input type="color" id="colorBad"></label>
         <label class="color-field">Warning<input type="color" id="colorWarn"></label>
       </div>
-      <p class="hint" style="margin-top:10px;">Pick a preset or adjust any swatch — panels, borders and table shading all follow automatically. Saved in this browser.</p>
+      <p class="hint" style="margin-top:12px;">Pick a preset or adjust any swatch — panels, borders and table shading all follow automatically. Saved in this browser.</p>
       <button type="button" class="btn-ghost color-reset" id="resetColorsBtn">Reset to default</button>
     </div>
   </section>
 
   <section class="snapshot" id="snapshotSection">
     <div class="snapshot-head">
-      <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Market snapshot — today's top movers</h3>
-      <span class="hint" id="snapshotMeta" style="margin:0;"></span>
+      <h3 style="font-size:0.95rem;">Today's market snapshot</h3>
+      <span class="hint" id="snapshotMeta"></span>
     </div>
     <div class="snapshot-grid" id="snapshotGrid">
       <div class="snap-card"><span class="snap-px">Loading market snapshot…</span></div>
@@ -249,19 +283,19 @@
 
   <div class="top-grid">
     <div class="panel">
-      <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;">Composite weights</h3>
+      <h3>How to weigh the comparison</h3>
       <div class="weights">
         <div class="weight-row"><label for="wGrowth">Growth</label><input type="range" id="wGrowth" min="0" max="100" value="34"><output id="wGrowthOut">34%</output></div>
         <div class="weight-row"><label for="wProfit">Profitability</label><input type="range" id="wProfit" min="0" max="100" value="33"><output id="wProfitOut">33%</output></div>
         <div class="weight-row"><label for="wValue">Valuation</label><input type="range" id="wValue" min="0" max="100" value="33"><output id="wValueOut">33%</output></div>
       </div>
-      <p class="hint" style="margin-top:8px;">Weights auto-normalize to 100% and recompute rankings instantly.</p>
+      <p class="hint" style="margin-top:10px;">If you care more about a company growing fast than about its stock being cheap, slide Growth up — the ranking recalculates instantly.</p>
     </div>
     <div class="panel">
-      <h3 style="font-size:0.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;">Track a ticker</h3>
+      <h3>Add a company</h3>
       <form class="add-form" id="addForm">
         <div class="add-row">
-          <input id="tickerInput" placeholder="TICKER (e.g. AMD)" maxlength="10" autocomplete="off">
+          <input id="tickerInput" placeholder="Ticker symbol, e.g. AMD" maxlength="10" autocomplete="off">
           <button type="submit" class="btn-primary" id="addBtn">Fetch</button>
         </div>
       </form>
@@ -278,7 +312,7 @@
 
   <footer id="footer">
     <span><span class="status-dot" id="statusDot" style="background:var(--good);"></span><span id="statusText">Ready</span></span>
-    <span>Data: Financial Modeling Prep, with Alpha Vantage as fallback for small caps. Not investment advice.</span>
+    <span>Data from Finnhub, with Financial Modeling Prep and Alpha Vantage as fallbacks. This is a learning tool, not investment advice.</span>
   </footer>
 </div>
 
@@ -288,7 +322,7 @@
 
   var STORE_KEY = "comps_terminal_companies_v1";
   var SETTINGS_KEY = "comps_terminal_settings_v1";
-  var DEFAULT_SETTINGS = { desc:true, verdict:true, stats:true, spark:true, health:true, news:true, table:true, groupCharts:true };
+  var DEFAULT_SETTINGS = { desc:true, verdict:true, stats:true, spark:true, health:true, news:true, table:false, groupCharts:true };
   var state = { docs: loadStore(), charts: {}, settings: loadSettings() };
 
   function loadStore(){
@@ -305,6 +339,56 @@
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings)); } catch(e){}
   }
 
+  // ---------- glossary: every term used on the page, in plain English ----------
+  var GLOSSARY = [
+    { id:"revGrowth", term:"Revenue growth", def:"How much more (or less) money the company brought in this year compared to last year. Growing revenue usually means more people are buying what it sells." },
+    { id:"netMargin", term:"Net margin", def:"Of every dollar in sales, how many cents the company keeps as profit after every expense. A 20% net margin means it keeps 20 cents of every dollar." },
+    { id:"grossMargin", term:"Gross margin", def:"What's left of each sales dollar after only the direct cost of making the product or service — before rent, salaries, marketing and the rest. A rough measure of pricing power." },
+    { id:"opMargin", term:"Operating margin", def:"Profit left after running the core business (including overhead like salaries and rent), but before interest and taxes. Sits between gross margin and net margin." },
+    { id:"pe", term:"P/E ratio (price-to-earnings)", def:"How many dollars investors are paying for every $1 of the company's yearly profit. A P/E of 30 means you're paying $30 for $1 of earnings. Higher can mean investors expect faster growth — or that the stock is simply expensive." },
+    { id:"evEbitda", term:"EV/EBITDA", def:"A cousin of P/E that compares the whole company's value (including its debt) to its core operating profit before interest, taxes, depreciation and amortization. Useful for comparing companies that carry different amounts of debt." },
+    { id:"currentRatio", term:"Current ratio", def:"Can the company cover its bills due in the next year? It's short-term assets divided by short-term liabilities. Above 1 generally means yes; well below 1 can be a warning sign." },
+    { id:"debtToEquity", term:"Debt-to-equity", def:"How much the company has borrowed compared to what shareholders have invested in it. A higher number means more debt relative to its own capital, and more risk if business turns down." },
+    { id:"freeCashFlow", term:"Free cash flow", def:"The actual cash left over after paying for day-to-day operations and the equipment/investments needed to keep running. This is what could fund dividends, buybacks, or paying down debt." },
+    { id:"marketCap", term:"Market cap", def:"The stock market's current price tag for the whole company: share price multiplied by the number of shares outstanding." },
+    { id:"composite", term:"Composite score", def:"This app's own 0–100 score for each company, combining its growth, profitability and valuation scores using the weights you set. It's relative to the peer group you're comparing — not an absolute grade, and not investment advice." },
+    { id:"fundamentals", term:"Fundamentals scorecard", def:"A plain factual checklist (is revenue growing, is the company profitable, can it cover its bills, is it too expensive) scored Strong / Mixed / Weak. It tells you what the numbers show, not whether to buy." },
+  ];
+  var glossaryById = {};
+  GLOSSARY.forEach(function(g){ glossaryById[g.id] = g; });
+
+  function renderGlossary(){
+    var list = document.getElementById("glossaryList");
+    list.innerHTML = GLOSSARY.map(function(g){
+      return '<div class="glossary-item" id="term-' + g.id + '"><dt>' + escapeHtml(g.term) + '</dt><dd>' + escapeHtml(g.def) + '</dd></div>';
+    }).join("");
+  }
+  function openGlossaryAt(id){
+    document.getElementById("learnPanel").classList.add("open");
+    document.getElementById("settingsPanel").classList.remove("open");
+    var el = document.getElementById("term-" + id);
+    if (el){
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    }
+  }
+  // A jargon label with a small "?" that jumps to its glossary entry.
+  function term(label, id){
+    return '<span>' + escapeHtml(label) + '<button type="button" class="term-btn" data-term-jump="' + id + '" aria-label="What does ' + escapeHtml(label) + ' mean?">?</button></span>';
+  }
+
+  document.getElementById("learnToggleBtn").addEventListener("click", function(){
+    document.getElementById("learnPanel").classList.toggle("open");
+    document.getElementById("settingsPanel").classList.remove("open");
+  });
+  document.getElementById("closeLearnBtn").addEventListener("click", function(){
+    document.getElementById("learnPanel").classList.remove("open");
+  });
+  document.addEventListener("click", function(e){
+    var btn = e.target.closest("[data-term-jump]");
+    if (btn) openGlossaryAt(btn.getAttribute("data-term-jump"));
+  });
+
   // ---------- settings panel ----------
   var settingCheckboxIds = { desc:"setDesc", verdict:"setVerdict", stats:"setStats", spark:"setSpark", health:"setHealth", news:"setNews", table:"setTable", groupCharts:"setGroupCharts" };
   Object.keys(settingCheckboxIds).forEach(function(key){
@@ -318,6 +402,7 @@
   });
   document.getElementById("settingsToggleBtn").addEventListener("click", function(){
     document.getElementById("settingsPanel").classList.toggle("open");
+    document.getElementById("learnPanel").classList.remove("open");
   });
   document.getElementById("closeSettingsBtn").addEventListener("click", function(){
     document.getElementById("settingsPanel").classList.remove("open");
@@ -325,15 +410,15 @@
 
   // ---------- color scheme ----------
   // Only these six get edited directly; panels/borders/muted text are
-  // derived from bg+fg in CSS via color-mix(), so any combination still
+  // derived from bg+ink in CSS via color-mix(), so any combination still
   // looks like one coherent theme instead of a patchwork.
-  var COLORS_KEY = "comps_terminal_colors_v1";
-  var DEFAULT_COLORS = { bg:"#0B0E14", fg:"#D9DEE7", accent:"#4FA6D9", good:"#3FCB8C", bad:"#E2637C", warn:"#E3B34E" };
+  var COLORS_KEY = "comps_terminal_colors_v2";
+  var DEFAULT_COLORS = { bg:"#F6F4EF", fg:"#242923", accent:"#1F6F54", good:"#1F6F54", bad:"#A6403D", warn:"#B4772A" };
   var PRESETS = [
-    { id:"slate", label:"Slate Blue", colors: DEFAULT_COLORS },
-    { id:"amber", label:"Terminal Amber", colors:{ bg:"#000000", fg:"#E8E6E0", accent:"#FF9E0F", good:"#00D964", bad:"#FF3B30", warn:"#FFD400" } },
-    { id:"emerald", label:"Emerald Night", colors:{ bg:"#0A1410", fg:"#DCEAE3", accent:"#3FCB8C", good:"#5FE0A6", bad:"#E2637C", warn:"#E3B34E" } },
-    { id:"daylight", label:"Daylight", colors:{ bg:"#F5F6F8", fg:"#1B2430", accent:"#2563AA", good:"#1E9A5A", bad:"#C43B4E", warn:"#B4780C" } },
+    { id:"paper", label:"Paper & Ink", colors: DEFAULT_COLORS },
+    { id:"sky", label:"Clear Sky", colors:{ bg:"#F3F6FA", fg:"#1B2634", accent:"#2563AA", good:"#1E8F5F", bad:"#C0433F", warn:"#B4772A" } },
+    { id:"rose", label:"Rosewood", colors:{ bg:"#FAF4F1", fg:"#2B211D", accent:"#A6403D", good:"#1F6F54", bad:"#A6403D", warn:"#B4772A" } },
+    { id:"night", label:"Night Reading", colors:{ bg:"#181C22", fg:"#E4E6EA", accent:"#6FB7A0", good:"#6FB7A0", bad:"#D98A88", warn:"#D9B36B" } },
   ];
   var colorFieldIds = { bg:"colorBg", fg:"colorFg", accent:"colorAccent", good:"colorGood", bad:"colorBad", warn:"colorWarn" };
 
@@ -344,23 +429,22 @@
   function saveColors(colors){
     try { localStorage.setItem(COLORS_KEY, JSON.stringify(colors)); } catch(e){}
   }
-  // Perceived-luminance check so text on the accent color (buttons, the
-  // "live peer analysis" tag, table headers) stays readable no matter what
-  // accent hue is picked, without needing a 7th picker for it.
+  // Perceived-luminance check so text on the accent color (buttons, price
+  // tag) stays readable no matter what accent hue is picked.
   function contrastFor(hex){
     var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
-    if (!m) return "#0A0E14";
+    if (!m) return "#20241F";
     var r = parseInt(m[1],16)/255, g = parseInt(m[2],16)/255, b = parseInt(m[3],16)/255;
     var lum = 0.2126*r + 0.7152*g + 0.0722*b;
-    return lum > 0.55 ? "#0A0E14" : "#F5F7FA";
+    return lum > 0.55 ? "#20241F" : "#FBFAF6";
   }
   function applyColors(colors){
     var root = document.documentElement.style;
     Object.keys(DEFAULT_COLORS).forEach(function(key){
-      root.setProperty("--" + key, colors[key] || DEFAULT_COLORS[key]);
+      root.setProperty("--" + (key === "fg" ? "ink" : key), colors[key] || DEFAULT_COLORS[key]);
     });
     root.setProperty("--accent-fg", contrastFor(colors.accent));
-    document.documentElement.style.colorScheme = contrastFor(colors.bg) === "#0A0E14" ? "light" : "dark";
+    document.documentElement.style.colorScheme = contrastFor(colors.bg) === "#20241F" ? "light" : "dark";
     Object.keys(colorFieldIds).forEach(function(key){
       var el = document.getElementById(colorFieldIds[key]);
       if (el) el.value = colors[key] || DEFAULT_COLORS[key];
@@ -411,7 +495,7 @@
     },
     price: function(p){ return (p==null||isNaN(p)) ? "—" : "$" + Number(p).toFixed(2); },
     pct: function(x){ return (x==null||isNaN(x)) ? "—" : (x*100).toFixed(1) + "%"; },
-    mult: function(x){ return (x==null||isNaN(x)) ? "n/m" : x.toFixed(1) + "x"; },
+    mult: function(x){ return (x==null||isNaN(x)) ? "n/a" : x.toFixed(1) + "x"; },
     score: function(x){ return (x==null||isNaN(x)) ? "—" : Math.round(x); }
   };
 
@@ -479,18 +563,22 @@
     return valid.reduce(function(a,b){return a+b;},0) / valid.length;
   }
 
+  // Prefers ratios the data source already computed (Finnhub's free tier
+  // gives these directly) over deriving them from raw dollar figures, which
+  // need full financial statements that not every source/tier provides.
   function deriveMetrics(c){
-    var revGrowth = (c.revenuePrior > 0) ? (c.revenueCur - c.revenuePrior) / c.revenuePrior : null;
+    var r = c.ratios || {};
+    var revGrowth = r.revGrowth != null ? r.revGrowth : ((c.revenuePrior > 0) ? (c.revenueCur - c.revenuePrior) / c.revenuePrior : null);
     var niGrowth = (c.netIncomePrior != null && c.netIncomePrior !== 0) ? (c.netIncomeCur - c.netIncomePrior) / Math.abs(c.netIncomePrior) : null;
-    var grossMargin = (c.revenueCur > 0) ? c.grossProfitCur / c.revenueCur : null;
-    var opMargin = (c.revenueCur > 0) ? c.opIncomeCur / c.revenueCur : null;
-    var netMargin = (c.revenueCur > 0) ? c.netIncomeCur / c.revenueCur : null;
+    var grossMargin = r.grossMargin != null ? r.grossMargin : ((c.revenueCur > 0) ? c.grossProfitCur / c.revenueCur : null);
+    var opMargin = r.opMargin != null ? r.opMargin : ((c.revenueCur > 0) ? c.opIncomeCur / c.revenueCur : null);
+    var netMargin = r.netMargin != null ? r.netMargin : ((c.revenueCur > 0) ? c.netIncomeCur / c.revenueCur : null);
     var marketCap = (c.price != null && c.shares != null) ? c.price * c.shares : null;
     var ev = (marketCap != null) ? marketCap + (c.debt||0) - (c.cash||0) : null;
     // Negative P/E or EV/EBITDA means a company is losing money -- that's not
     // "cheap", so those cases are excluded from the peer range and scored 0.
-    var pe = (marketCap != null && c.netIncomeCur > 0) ? marketCap / c.netIncomeCur : null;
-    var evEbitda = (ev != null && c.ebitdaCur > 0) ? ev / c.ebitdaCur : null;
+    var pe = r.pe != null ? (r.pe > 0 ? r.pe : null) : ((marketCap != null && c.netIncomeCur > 0) ? marketCap / c.netIncomeCur : null);
+    var evEbitda = r.evEbitda != null ? (r.evEbitda > 0 ? r.evEbitda : null) : ((ev != null && c.ebitdaCur > 0) ? ev / c.ebitdaCur : null);
     return { revGrowth: revGrowth, niGrowth: niGrowth, grossMargin: grossMargin, opMargin: opMargin,
               netMargin: netMargin, marketCap: marketCap, ev: ev, pe: pe, evEbitda: evEbitda };
   }
@@ -531,9 +619,10 @@
   // ---------- fundamentals scorecard (company-level, not peer-relative) ----------
   // A factual pass/fail checklist against fixed thresholds -- not a buy/sell call.
   function computeHealth(c){
-    var currentRatio = (c.currentAssets != null && c.currentLiabilities > 0) ? c.currentAssets / c.currentLiabilities : null;
-    var debtToEquity = null;
-    if (c.totalEquity != null){
+    var r = c.ratios || {};
+    var currentRatio = r.currentRatio != null ? r.currentRatio : ((c.currentAssets != null && c.currentLiabilities > 0) ? c.currentAssets / c.currentLiabilities : null);
+    var debtToEquity = r.debtToEquity != null ? r.debtToEquity : null;
+    if (debtToEquity == null && c.totalEquity != null){
       debtToEquity = c.totalEquity > 0 ? (c.debt || 0) / c.totalEquity : Infinity;
     }
     var burnMonthly = (c.operatingCashFlow != null && c.operatingCashFlow < 0) ? Math.abs(c.operatingCashFlow) / 12 : null;
@@ -543,23 +632,45 @@
 
   function computeVerdict(scored, health){
     var checks = [
-      { label: "Revenue growing", value: scored.revGrowth == null ? null : scored.revGrowth > 0 },
-      { label: "Net margin positive", value: scored.netMargin == null ? null : scored.netMargin > 0 },
-      { label: "Operating margin positive", value: scored.opMargin == null ? null : scored.opMargin > 0 },
-      { label: "Free cash flow positive", value: health.fcf == null ? null : health.fcf > 0 },
-      { label: "Current ratio above 1", value: health.currentRatio == null ? null : health.currentRatio > 1 },
-      { label: "Debt/equity under 2x", value: health.debtToEquity == null ? null : health.debtToEquity < 2 },
-      { label: "P/E under 40 (meaningful earnings)", value: scored.pe == null ? false : scored.pe < 40 },
+      { label: "Revenue is growing", value: scored.revGrowth == null ? null : scored.revGrowth > 0 },
+      { label: "Net margin is positive", value: scored.netMargin == null ? null : scored.netMargin > 0 },
+      { label: "Operating margin is positive", value: scored.opMargin == null ? null : scored.opMargin > 0 },
+      { label: "Free cash flow is positive", value: health.fcf == null ? null : health.fcf > 0 },
+      { label: "Can cover short-term bills (current ratio above 1)", value: health.currentRatio == null ? null : health.currentRatio > 1 },
+      { label: "Debt is under 2x shareholder equity", value: health.debtToEquity == null ? null : health.debtToEquity < 2 },
+      { label: "P/E is under 40 (earnings are meaningful)", value: scored.pe == null ? false : scored.pe < 40 },
     ];
     var known = checks.filter(function(c){ return c.value !== null; });
     if (known.length < 3){
-      return { band: "na", label: "Not enough data", checks: checks, passed: null, total: null };
+      return { band: "na", label: "Not enough data yet", checks: checks, passed: null, total: null };
     }
     var passed = known.filter(function(c){ return c.value === true; }).length;
     var ratio = passed / known.length;
     var band = ratio >= 0.75 ? "strong" : (ratio >= 0.4 ? "mixed" : "weak");
     var label = band === "strong" ? "Strong fundamentals" : (band === "mixed" ? "Mixed fundamentals" : "Weak fundamentals");
     return { band: band, label: label, checks: checks, passed: passed, total: known.length };
+  }
+
+  // ---------- plain-English takeaway, written from the actual numbers ----------
+  function describeTakeaway(c, verdict){
+    var name = c.name || c.ticker;
+    var growthBit = c.revGrowth == null ? null :
+      c.revGrowth > 0.15 ? "growing sales fast" :
+      c.revGrowth > 0 ? "growing sales" :
+      c.revGrowth < -0.02 ? "seeing sales shrink" : "keeping sales roughly flat";
+    var profitBit = c.netMargin == null ? null :
+      c.netMargin > 0.15 ? "turning a healthy profit" :
+      c.netMargin > 0 ? "turning a thin profit" : "currently losing money";
+    var story = [growthBit, profitBit].filter(Boolean).join(" while ");
+    if (!story) story = "still missing enough data here to say much about growth or profit";
+
+    var valBit = "";
+    if (c.valueScore != null){
+      valBit = c.valueScore >= 66 ? "priced more cheaply than the peers you're tracking"
+             : c.valueScore >= 33 ? "priced roughly in line with its peers"
+             : "priced richer than its peers";
+    }
+    return name + " is " + story + (valBit ? ", and is currently " + valBit : "") + ".";
   }
 
   // ---------- fetch ----------
@@ -597,7 +708,7 @@
       upsertDoc(doc);
       tickerEl.value = "";
       render();
-      setStatus("Live — " + state.docs.length + " tracked", "var(--good)");
+      setStatus(state.docs.length + " tracked", "var(--good)");
       if (doc.peers && doc.peers.length){
         renderPeerChips(doc.peers, doc.industry);
       }
@@ -614,7 +725,7 @@
     var already = new Set(state.docs.map(function(d){return d.ticker;}));
     var fresh = peers.filter(function(p){ return !already.has(p); });
     if (!fresh.length){ el.innerHTML = ""; return; }
-    el.innerHTML = '<span class="hint" style="width:100%;">Suggested peers — click to add:</span>';
+    el.innerHTML = '<span class="hint" style="width:100%;">Companies in the same industry, for comparison — click to add:</span>';
     fresh.forEach(function(p){
       var chip = document.createElement("span");
       chip.className = "peer-chip";
@@ -653,9 +764,9 @@
   function chartColors(){
     var css = getComputedStyle(document.documentElement);
     return {
-      muted: css.getPropertyValue("--muted").trim() || "#5B6472",
-      accent: css.getPropertyValue("--accent").trim() || "#0F6E5C",
-      border: css.getPropertyValue("--border").trim() || "#D7DEE4"
+      muted: css.getPropertyValue("--muted").trim() || "#6B7568",
+      accent: css.getPropertyValue("--accent").trim() || "#1F6F54",
+      border: css.getPropertyValue("--border").trim() || "#DDD8CC"
     };
   }
 
@@ -665,7 +776,7 @@
   function renderTape(){
     var track = document.getElementById("tapeTrack");
     if (!state.docs.length){
-      track.innerHTML = '<span class="tape-empty">COMPS TERMINAL — TRACK A TICKER TO POPULATE THE TAPE —</span>';
+      track.innerHTML = '<span class="tape-empty">Comps Notebook — track a company below to fill this in —</span>';
       return;
     }
     var items = state.docs.map(function(d){
@@ -685,7 +796,7 @@
     renderTape();
 
     if (!state.docs.length){
-      root.innerHTML = '<div class="empty"><strong>No companies tracked yet</strong>Type a ticker above — it fetches live and groups automatically with any real industry peers you add.</div>';
+      root.innerHTML = '<div class="empty"><strong>Nothing tracked yet</strong>Type a ticker above to start — it fetches live data, suggests real peers in the same industry, and explains what the numbers mean as you go.</div>';
       return;
     }
 
@@ -698,12 +809,12 @@
       var scored = scoreGroup(companies);
 
       html += '<section class="panel group-block">';
-      html += '<div class="group-head"><h2>' + escapeHtml(key) + '</h2><span class="count-pill">' + scored.length + ' tracked' + (scored.length < 2 ? " · add a peer to rank" : "") + '</span></div>';
+      html += '<div class="group-head"><h2>' + escapeHtml(key) + '</h2><span class="count-pill">' + scored.length + (scored.length === 1 ? " company tracked" : " companies tracked") + (scored.length < 2 ? " — add a peer to see a real comparison" : "") + '</span></div>';
 
       if (state.settings.table){
         html += '<div class="tbl-wrap"><table><thead><tr>' +
-          '<th>#</th><th>Company</th><th class="num-cell">Rev Growth</th><th class="num-cell">Net Margin</th>' +
-          '<th class="num-cell">P/E</th><th class="num-cell">EV/EBITDA</th><th class="num-cell">Composite</th><th></th>' +
+          '<th>#</th><th>Company</th><th class="num-cell">' + term("Rev growth","revGrowth") + '</th><th class="num-cell">' + term("Net margin","netMargin") + '</th>' +
+          '<th class="num-cell">' + term("P/E","pe") + '</th><th class="num-cell">' + term("EV/EBITDA","evEbitda") + '</th><th class="num-cell">' + term("Score","composite") + '</th><th></th>' +
           '</tr></thead><tbody>';
         scored.forEach(function(c, idx){
           html += '<tr>' +
@@ -714,7 +825,7 @@
             '<td class="num-cell">' + fmt.mult(c.pe) + '</td>' +
             '<td class="num-cell">' + fmt.mult(c.evEbitda) + '</td>' +
             '<td class="num-cell"><span class="score-pill ' + scoreClass(c.composite) + '">' + fmt.score(c.composite) + '</span></td>' +
-            '<td class="num-cell"><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '" title="Remove">✕</button></td>' +
+            '<td class="num-cell"><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '" title="Remove">Remove</button></td>' +
             '</tr>';
         });
         html += '</tbody></table></div>';
@@ -722,7 +833,7 @@
 
       if (state.settings.groupCharts && scored.length >= 2){
         html += '<div class="charts">' +
-          '<div class="chart-box"><h3>Composite score</h3><canvas id="bar-' + safeId(key) + '"></canvas></div>' +
+          '<div class="chart-box"><h3>' + term("Composite score","composite") + ', side by side</h3><canvas id="bar-' + safeId(key) + '"></canvas></div>' +
           '<div class="chart-box"><h3>Growth vs. profitability</h3><canvas id="scatter-' + safeId(key) + '"></canvas></div>' +
           '</div>';
       }
@@ -731,30 +842,48 @@
       scored.forEach(function(c){
         var health = computeHealth(c);
         var verdict = computeVerdict(c, health);
-        var checklist = verdict.checks.map(function(chk){
-          var mark = chk.value === null ? "n/a" : (chk.value ? "pass" : "fail");
-          return chk.label + ": " + mark;
-        }).join(" · ");
+        var takeaway = describeTakeaway(c, verdict);
         var logoImg = c.logo ? '<img class="card-logo" src="' + escapeHtml(c.logo) + '" alt="" onerror="this.style.display=\'none\'">' : "";
-        var sourceLabel = (c.dataSource && (c.dataSource.financials === "alphavantage" || c.dataSource.quote === "alphavantage")) ? "Alpha Vantage fallback used" : "Financial Modeling Prep";
+        var sourceLabel = (function(){
+          var labels = { finnhub: "Finnhub", fmp: "Financial Modeling Prep", alphavantage: "Alpha Vantage" };
+          var used = [];
+          (c.dataSource ? [c.dataSource.quote, c.dataSource.financials, c.dataSource.cashflow] : []).forEach(function(s){
+            if (s && s !== "none" && used.indexOf(s) === -1) used.push(s);
+          });
+          return used.length ? used.map(function(s){ return labels[s] || s; }).join(" + ") : "Unknown";
+        })();
+        var chg = c.changePct;
+        var chgDir = chg == null ? "" : (chg >= 0 ? "up" : "down");
+        var chgText = chg == null ? "" : (chg >= 0 ? "▲ " : "▼ ") + Math.abs(chg).toFixed(2) + "%";
 
         html += '<div class="card">' +
-          '<div class="card-top"><div class="card-name-row">' + logoImg + '<div><div class="card-name">' + escapeHtml(c.name) + '</div><div class="card-ticker">' + escapeHtml(c.ticker) + '</div></div></div><div class="card-price">' + fmt.price(c.price) + '</div></div>';
+          '<div class="card-top"><div class="card-name-row">' + logoImg + '<div><div class="card-name">' + escapeHtml(c.name) + '</div><div class="card-ticker">' + escapeHtml(c.ticker) + '</div></div></div>' +
+          '<div><div class="card-price">' + fmt.price(c.price) + '</div>' + (chgText ? '<span class="card-chg ' + chgDir + '">' + chgText + '</span>' : '') + '</div></div>';
+
+        html += '<p class="takeaway">' + escapeHtml(takeaway) + '</p>';
 
         if (state.settings.desc && c.description){
-          html += '<div class="card-desc" title="' + escapeHtml(c.description) + '">' + escapeHtml(c.description) + '</div>';
+          html += '<div class="card-desc">' + escapeHtml(c.description) + '</div>';
         }
 
         if (state.settings.verdict){
-          html += '<span class="verdict-pill verdict-' + verdict.band + '" title="' + escapeHtml(checklist) + (verdict.total ? ' (' + verdict.passed + '/' + verdict.total + ' checks passed)' : '') + '">' + escapeHtml(verdict.label) + (verdict.total ? ' ' + verdict.passed + '/' + verdict.total : '') + '</span>';
+          var checklistHtml = verdict.checks.map(function(chk){
+            var cls = chk.value === null ? "check-na" : (chk.value ? "check-pass" : "check-fail");
+            var mark = chk.value === null ? "–" : (chk.value ? "✓" : "✕");
+            return '<div class="check-row ' + cls + '"><span class="check-mark">' + mark + '</span><span>' + escapeHtml(chk.label) + '</span></div>';
+          }).join("");
+          html += '<div>' +
+            '<button type="button" class="verdict-pill verdict-' + verdict.band + '" data-verdict-toggle="' + escapeHtml(c.ticker) + '">' + escapeHtml(verdict.label) + (verdict.total ? ' · ' + verdict.passed + ' of ' + verdict.total + ' checks' : '') + '</button>' +
+            '<div class="checklist" id="checklist-' + escapeHtml(c.ticker) + '">' + checklistHtml + '<p class="hint" style="margin-top:4px;">' + term("What's a fundamentals scorecard?","fundamentals") + '</p></div>' +
+            '</div>';
         }
 
         if (state.settings.stats){
           html += '<div class="card-stats">' +
-            '<div><span class="k">Mkt Cap</span>' + fmt.money(c.marketCap) + '</div>' +
-            '<div><span class="k">Growth</span>' + fmt.score(c.growthScore) + '</div>' +
-            '<div><span class="k">Profitability</span>' + fmt.score(c.profitScore) + '</div>' +
-            '<div><span class="k">Valuation</span>' + fmt.score(c.valueScore) + '</div>' +
+            '<div><span class="k">' + term("Market cap","marketCap") + '</span><span class="v">' + fmt.money(c.marketCap) + '</span></div>' +
+            '<div><span class="k">Growth score</span><span class="v">' + fmt.score(c.growthScore) + '</span></div>' +
+            '<div><span class="k">Profitability score</span><span class="v">' + fmt.score(c.profitScore) + '</span></div>' +
+            '<div><span class="k">Valuation score</span><span class="v">' + fmt.score(c.valueScore) + '</span></div>' +
             '</div>';
         }
 
@@ -764,20 +893,20 @@
 
         if (state.settings.health){
           html += '<div class="health-strip">' +
-            '<div><span class="k">Current ratio</span>' + (health.currentRatio == null ? "—" : health.currentRatio.toFixed(2) + "x") + '</div>' +
-            '<div><span class="k">Debt/equity</span>' + (health.debtToEquity == null ? "—" : (health.debtToEquity === Infinity ? "n/m" : health.debtToEquity.toFixed(2) + "x")) + '</div>' +
-            '<div><span class="k">Free cash flow</span>' + fmt.money(health.fcf) + '</div>' +
-            '<div><span class="k">Data source</span>' + sourceLabel + '</div>' +
-            (health.runwayMonths != null ? '<div class="runway">Burning cash — ~' + Math.round(health.runwayMonths) + ' months of runway at current pace</div>' : '') +
+            '<div><span class="k">' + term("Current ratio","currentRatio") + '</span><span class="v">' + (health.currentRatio == null ? "—" : health.currentRatio.toFixed(2) + "x") + '</span></div>' +
+            '<div><span class="k">' + term("Debt/equity","debtToEquity") + '</span><span class="v">' + (health.debtToEquity == null ? "—" : (health.debtToEquity === Infinity ? "n/a" : health.debtToEquity.toFixed(2) + "x")) + '</span></div>' +
+            '<div><span class="k">' + term("Free cash flow","freeCashFlow") + '</span><span class="v">' + fmt.money(health.fcf) + '</span></div>' +
+            '<div><span class="k">Data source</span><span class="v" style="font-family:var(--font-body); font-weight:500;">' + sourceLabel + '</span></div>' +
+            (health.runwayMonths != null ? '<div class="runway">Burning cash — roughly ' + Math.round(health.runwayMonths) + ' months of runway at the current pace</div>' : '') +
             '</div>';
         }
 
         if (state.settings.news){
-          html += '<button type="button" class="news-toggle" data-news="' + escapeHtml(c.ticker) + '">Load recent news ▾</button>' +
+          html += '<button type="button" class="news-toggle" data-news="' + escapeHtml(c.ticker) + '">Load recent news</button>' +
             '<div class="news-list" id="news-' + escapeHtml(c.ticker) + '" hidden></div>';
         }
 
-        html += '<div class="card-actions"><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '" title="Remove">Remove ✕</button></div>';
+        html += '<div class="card-actions"><span class="hint"></span><button class="icon-btn" data-remove="' + escapeHtml(c.ticker) + '">Remove</button></div>';
 
         html += '</div>';
       });
@@ -792,6 +921,12 @@
     root.querySelectorAll("[data-news]").forEach(function(btn){
       btn.addEventListener("click", function(){ toggleNews(btn.getAttribute("data-news"), btn); });
     });
+    root.querySelectorAll("[data-verdict-toggle]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var box = document.getElementById("checklist-" + btn.getAttribute("data-verdict-toggle"));
+        if (box) box.classList.toggle("open");
+      });
+    });
 
     Object.keys(groups).forEach(function(key){
       var companies = groups[key];
@@ -805,7 +940,7 @@
           data: { labels: scored.map(function(c){ return c.ticker; }),
             datasets: [{ data: scored.map(function(c){ return Math.round(c.composite); }), backgroundColor: colors.accent, borderRadius: 5, maxBarThickness: 36 }] },
           options: { plugins:{legend:{display:false}},
-            scales:{ x:{ ticks:{color:colors.muted, font:{family:"IBM Plex Mono", size:11}}, grid:{display:false} },
+            scales:{ x:{ ticks:{color:colors.muted, font:{family:"Inter", size:11}}, grid:{display:false} },
                      y:{ min:0, max:100, ticks:{color:colors.muted}, grid:{color:colors.border} } } }
         });
       }
@@ -839,9 +974,9 @@
   async function toggleNews(ticker, btn){
     var box = document.getElementById("news-" + ticker);
     if (!box) return;
-    if (!box.hidden){ box.hidden = true; btn.textContent = "Load recent news ▾"; return; }
+    if (!box.hidden){ box.hidden = true; btn.textContent = "Load recent news"; return; }
     if (newsCache[ticker]){
-      box.hidden = false; btn.textContent = "Hide news ▴";
+      box.hidden = false; btn.textContent = "Hide news";
       return;
     }
     btn.textContent = "Loading…";
@@ -861,10 +996,10 @@
         }).join("");
       }
       box.hidden = false;
-      btn.textContent = "Hide news ▴";
+      btn.textContent = "Hide news";
     } catch (err) {
       showToast("Couldn't load news for " + ticker + ": " + err.message, true);
-      btn.textContent = "Load recent news ▾";
+      btn.textContent = "Load recent news";
     } finally {
       btn.disabled = false;
     }
@@ -900,15 +1035,13 @@
         showToast("Couldn't load shared ticker " + toFetch[i] + ": " + err.message, true);
       }
     }
-    setStatus("Live — " + state.docs.length + " tracked", "var(--good)");
+    setStatus(state.docs.length + " tracked", "var(--good)");
   }
 
   // ---------- market snapshot: always visible, every page load ----------
   // Uses /api/movers alone (one cached Alpha Vantage call server-side) so
   // the page is informative before anyone types a ticker, without spending
-  // a full /api/company (FMP + AV) lookup per mover on every single visit --
-  // that's what the old first-visit auto-populate used to do, and it was
-  // eating through the daily API quota fast.
+  // a full /api/company lookup per mover on every single visit.
   async function loadMarketSnapshot(){
     var grid = document.getElementById("snapshotGrid");
     var meta = document.getElementById("snapshotMeta");
@@ -931,7 +1064,7 @@
           '<span class="snap-chg ' + dir + '">' + chgText + '</span>' +
           '<button type="button" class="snap-add" data-snap-add="' + escapeHtml(m.ticker) + '" title="Track ' + escapeHtml(m.ticker) + '" ' + (already ? "disabled" : "") + '>' + (already ? "✓" : "+") + '</button></div>';
       }).join("");
-      meta.textContent = "Gainers & losers, via Alpha Vantage" + (json.updatedAt ? " · " + json.updatedAt : "");
+      meta.textContent = "Today's biggest gainers and losers, via Alpha Vantage" + (json.updatedAt ? " · " + json.updatedAt : "");
       grid.querySelectorAll("[data-snap-add]").forEach(function(btn){
         btn.addEventListener("click", async function(){
           var t = btn.getAttribute("data-snap-add");
@@ -952,6 +1085,7 @@
     }
   }
 
+  renderGlossary();
   render();
   bootstrapFromUrl();
   loadMarketSnapshot();

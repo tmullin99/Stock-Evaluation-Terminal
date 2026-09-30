@@ -3,23 +3,33 @@
 // Runs server-side (Vercel Node.js function), so API keys never reach the
 // browser and this call is not subject to browser CORS rules.
 //
-// Two data sources, tried in order:
-//   1. Financial Modeling Prep (FMP_API_KEY) -- strong coverage for
-//      large/mid caps, thin coverage for small caps on the free tier.
-//   2. Alpha Vantage (ALPHA_VANTAGE_API_KEY, optional) -- used only to
-//      fill in whatever FMP left empty. Get a free key at
-//      alphavantage.co/support/#api-key (no signup form, just an email).
-//      Free tier is rate-limited (historically ~25-500 requests/day
-//      depending on when you signed up), so this is a fallback, not the
-//      primary source.
+// Three data sources, tried in order:
+//   1. Finnhub (FINNHUB_API_KEY) -- PRIMARY. Free tier is 60 calls/minute
+//      (no daily cap), which is what this file is built around now. Get a
+//      free key at finnhub.io/register (just an email).
+//   2. Financial Modeling Prep (FMP_API_KEY, optional) -- used only when
+//      Finnhub didn't have this ticker at all. Its free tier is a tight
+//      ~250 requests/day, so it's a fallback now, not the primary source.
+//   3. Alpha Vantage (ALPHA_VANTAGE_API_KEY, optional) -- last resort, for
+//      whatever both of the above still left empty. Free tier is only
+//      ~25 requests/day as of writing, so it rarely gets much of a chance.
 //
-// Field names for both providers are well-documented and have been
-// stable for years, EXCEPT FMP's stable-tier renaming, which this file
-// has already been adjusted for once. `pick()` tries a short list of
-// known alternates per field, and the response always includes `raw`
-// (the untouched upstream payloads) so a field-name drift can be
-// diagnosed from your browser's Network tab without guessing.
+// In the common case (Finnhub has the ticker), this makes 4 calls total
+// and never touches FMP or Alpha Vantage at all -- that's the whole point
+// of the reordering: the old FMP-primary version spent up to 6 FMP calls
+// on every single lookup and burned through its daily quota in a hurry.
+//
+// A note on Finnhub's `metric` fields: margins and growth rates come back
+// as plain percentages (e.g. 42.5 meaning 42.5%), so they're divided by
+// 100 below to match this app's decimal-fraction convention everywhere
+// else. P/E, EV/EBITDA, current ratio and debt/equity come back as plain
+// multiples already, so those aren't rescaled. These are Finnhub's
+// documented conventions, not verified against a live key from here --
+// same as the FMP/AV field names elsewhere in this file, the response
+// always includes `raw` so a scaling or naming mismatch can be caught from
+// your browser's Network tab and fixed in one line, without guessing.
 
+const FINNHUB_BASE = "https://finnhub.io/api/v1";
 const FMP_BASE = "https://financialmodelingprep.com/stable";
 const AV_BASE = "https://www.alphavantage.co/query";
 
@@ -31,9 +41,6 @@ async function fetchJson(url, label) {
     throw new Error(label + " returned non-JSON (status " + r.status + "): " + text.slice(0, 200));
   }
   if (!r.ok) {
-    // Surface FMP's actual error body (it usually explains *why*: bad key,
-    // plan doesn't cover this endpoint, rate limit, etc.) instead of just
-    // the HTTP status, since that's what actually tells you what to fix.
     const msg = (json && (json.error || json.message || json["Error Message"])) || ("HTTP " + r.status);
     throw new Error(label + " (" + r.status + "): " + msg);
   }
@@ -81,8 +88,97 @@ function num(v) {
   var n = Number(v);
   return isNaN(n) ? null : n;
 }
+function pct100(v) { var n = num(v); return n == null ? null : n / 100; }
 
 function mm(v) { return v == null ? null : v / 1e6; }
+
+// ---------------- Finnhub ----------------
+async function fetchFinnhub(ticker, key) {
+  var q = "symbol=" + encodeURIComponent(ticker) + "&token=" + encodeURIComponent(key);
+  var results = await Promise.allSettled([
+    fetchJson(FINNHUB_BASE + "/stock/profile2?" + q, "Finnhub profile"),
+    fetchJson(FINNHUB_BASE + "/quote?" + q, "Finnhub quote"),
+    fetchJson(FINNHUB_BASE + "/stock/metric?" + q + "&metric=all", "Finnhub metrics"),
+    fetchJson(FINNHUB_BASE + "/stock/peers?" + q, "Finnhub peers"),
+  ]);
+  var val = function (r) { return r.status === "fulfilled" ? r.value : null; };
+  var profile = val(results[0]);
+  var quote = val(results[1]);
+  var metricResp = val(results[2]);
+  var peersData = val(results[3]);
+  // Finnhub returns 200 with an empty/zeroed body for a symbol it doesn't
+  // have, rather than an HTTP error -- treat those as "no data" too.
+  if (profile && Object.keys(profile).length === 0) profile = null;
+  if (quote && (quote.c === 0 || quote.c == null) && (quote.pc === 0 || quote.pc == null)) quote = null;
+  return {
+    profile: profile,
+    quote: quote,
+    metric: (metricResp && metricResp.metric) || null,
+    peers: Array.isArray(peersData) ? peersData.filter(function (p) { return p && p !== ticker; }) : [],
+    errors: results.map(function (r) { return r.status === "rejected" ? r.reason.message : null; }),
+  };
+}
+
+// ---------------- Financial Modeling Prep (fallback) ----------------
+async function fetchFmp(ticker, key) {
+  var q = "symbol=" + encodeURIComponent(ticker) + "&apikey=" + encodeURIComponent(key);
+  var results = await Promise.allSettled([
+    fetchJson(FMP_BASE + "/profile?" + q, "FMP profile"),
+    fetchJson(FMP_BASE + "/quote?" + q, "FMP quote"),
+    fetchJson(FMP_BASE + "/income-statement?" + q + "&limit=5", "FMP income"),
+    fetchJson(FMP_BASE + "/balance-sheet-statement?" + q + "&limit=1", "FMP balance"),
+    fetchJson(FMP_BASE + "/cash-flow-statement?" + q + "&limit=1", "FMP cash flow"),
+    fetchJson(FMP_BASE + "/stock-peers?" + q, "FMP peers"),
+  ]);
+  var val = function (r) { return r.status === "fulfilled" ? r.value : null; };
+  var income = val(results[2]);
+  var balance = val(results[3]);
+  var cashflow = val(results[4]);
+  var incomeArr = Array.isArray(income) ? income : (income ? [income] : []);
+  var balanceArr = Array.isArray(balance) ? balance : (balance ? [balance] : []);
+  var cashflowArr = Array.isArray(cashflow) ? cashflow : (cashflow ? [cashflow] : []);
+  var peersData = val(results[5]);
+  var peers = [];
+  if (Array.isArray(peersData) && peersData[0] && Array.isArray(peersData[0].peersList)) {
+    peers = peersData[0].peersList;
+  } else if (peersData && Array.isArray(peersData.peersList)) {
+    peers = peersData.peersList;
+  } else if (Array.isArray(peersData)) {
+    peers = peersData.map(function (p) { return (typeof p === "string") ? p : (p && p.symbol); }).filter(Boolean);
+  }
+  return {
+    profile: val(results[0]),
+    quote: val(results[1]),
+    incomeArr: incomeArr,
+    balanceCur: balanceArr[0] || null,
+    cashflowCur: cashflowArr[0] || null,
+    peers: peers,
+    errors: results.map(function (r) { return r.status === "rejected" ? r.reason.message : null; }),
+  };
+}
+
+// ---------------- Alpha Vantage (last resort) ----------------
+async function fetchAv(ticker, key, need) {
+  var avq = "symbol=" + encodeURIComponent(ticker) + "&apikey=" + encodeURIComponent(key);
+  var results = await Promise.allSettled([
+    need.profile ? fetchJson(AV_BASE + "?function=OVERVIEW&" + avq, "Alpha Vantage overview") : Promise.resolve(null),
+    need.quote ? fetchJson(AV_BASE + "?function=GLOBAL_QUOTE&" + avq, "Alpha Vantage quote") : Promise.resolve(null),
+    need.income ? fetchJson(AV_BASE + "?function=INCOME_STATEMENT&" + avq, "Alpha Vantage income") : Promise.resolve(null),
+    need.balance ? fetchJson(AV_BASE + "?function=BALANCE_SHEET&" + avq, "Alpha Vantage balance") : Promise.resolve(null),
+    need.cashflow ? fetchJson(AV_BASE + "?function=CASH_FLOW&" + avq, "Alpha Vantage cash flow") : Promise.resolve(null),
+  ]);
+  var val = function (r) { return r.status === "fulfilled" ? r.value : null; };
+  var income = val(results[2]);
+  var balance = val(results[3]);
+  var cashflow = val(results[4]);
+  return {
+    overview: val(results[0]),
+    quote: val(results[1]),
+    incomeArr: (income && income.annualReports) || [],
+    balCur: (balance && balance.annualReports && balance.annualReports[0]) || null,
+    cfCur: (cashflow && cashflow.annualReports && cashflow.annualReports[0]) || null,
+  };
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -91,10 +187,11 @@ module.exports = async function handler(req, res) {
     res.status(400).json({ error: "Pass ?ticker=SYMBOL" });
     return;
   }
+  var finnhubKey = process.env.FINNHUB_API_KEY;
   var fmpKey = process.env.FMP_API_KEY;
   var avKey = process.env.ALPHA_VANTAGE_API_KEY;
-  if (!fmpKey) {
-    res.status(500).json({ error: "Server is missing FMP_API_KEY. Add it as an environment variable in your hosting dashboard and redeploy." });
+  if (!finnhubKey && !fmpKey) {
+    res.status(500).json({ error: "Server is missing both FINNHUB_API_KEY and FMP_API_KEY -- add at least one as an environment variable in your hosting dashboard and redeploy. Finnhub is recommended (much higher free-tier limit)." });
     return;
   }
 
@@ -104,116 +201,113 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  var q = "symbol=" + encodeURIComponent(ticker) + "&apikey=" + encodeURIComponent(fmpKey);
-
   try {
-    var fmpResults = await Promise.allSettled([
-      fetchJson(FMP_BASE + "/profile?" + q, "FMP profile"),
-      fetchJson(FMP_BASE + "/quote?" + q, "FMP quote"),
-      fetchJson(FMP_BASE + "/income-statement?" + q + "&limit=5", "FMP income"),
-      fetchJson(FMP_BASE + "/balance-sheet-statement?" + q + "&limit=1", "FMP balance"),
-      fetchJson(FMP_BASE + "/cash-flow-statement?" + q + "&limit=1", "FMP cash flow"),
-      fetchJson(FMP_BASE + "/stock-peers?" + q, "FMP peers"),
-    ]);
-    var val = function (r) { return r.status === "fulfilled" ? r.value : null; };
-    var profile = val(fmpResults[0]);
-    var quote = val(fmpResults[1]);
-    var income = val(fmpResults[2]);
-    var balance = val(fmpResults[3]);
-    var cashflow = val(fmpResults[4]);
-    var peersData = val(fmpResults[5]);
+    // ---- 1. Finnhub, primary ----
+    var fh = { profile: null, quote: null, metric: null, peers: [], errors: [] };
+    if (finnhubKey) fh = await fetchFinnhub(ticker, finnhubKey);
 
-    var incomeArr = Array.isArray(income) ? income : (income ? [income] : []);
-    var balanceArr = Array.isArray(balance) ? balance : (balance ? [balance] : []);
-    var cashflowArr = Array.isArray(cashflow) ? cashflow : (cashflow ? [cashflow] : []);
-    var incomeCur = incomeArr[0] || null;
-    var incomePrior = incomeArr[1] || null;
-    var balanceCur = balanceArr[0] || null;
-    var cashflowCur = cashflowArr[0] || null;
+    var source = { quote: fh.quote ? "finnhub" : "none", financials: fh.metric ? "finnhub" : "none", cashflow: "none" };
 
-    var source = { quote: quote ? "fmp" : "none", financials: incomeArr.length ? "fmp" : "none", cashflow: cashflowCur ? "fmp" : "none" };
-
-    // ---- Alpha Vantage fallback for whatever FMP left empty ----
-    // Important: this has to run even when FMP came back with NOTHING at all
-    // (e.g. its daily quota is exhausted, or the key is bad) -- that's
-    // exactly the moment a fallback is for. An earlier version of this file
-    // gave up before ever trying Alpha Vantage in that case.
-    var avOverview = null, avQuote = null, avIncome = null, avBalance = null, avCashflow = null;
-    var needsFallback = !profile || !quote || !incomeArr.length || !balanceCur || !cashflowCur;
-    if (needsFallback && avKey) {
-      var avq = "symbol=" + encodeURIComponent(ticker) + "&apikey=" + encodeURIComponent(avKey);
-      var avResults = await Promise.allSettled([
-        (!profile) ? fetchJson(AV_BASE + "?function=OVERVIEW&" + avq, "Alpha Vantage overview") : Promise.resolve(null),
-        (!quote) ? fetchJson(AV_BASE + "?function=GLOBAL_QUOTE&" + avq, "Alpha Vantage quote") : Promise.resolve(null),
-        (!incomeArr.length) ? fetchJson(AV_BASE + "?function=INCOME_STATEMENT&" + avq, "Alpha Vantage income") : Promise.resolve(null),
-        (!balanceCur) ? fetchJson(AV_BASE + "?function=BALANCE_SHEET&" + avq, "Alpha Vantage balance") : Promise.resolve(null),
-        (!cashflowCur) ? fetchJson(AV_BASE + "?function=CASH_FLOW&" + avq, "Alpha Vantage cash flow") : Promise.resolve(null),
-      ]);
-      avOverview = avResults[0].status === "fulfilled" ? avResults[0].value : null;
-      avQuote = avResults[1].status === "fulfilled" ? avResults[1].value : null;
-      avIncome = avResults[2].status === "fulfilled" ? avResults[2].value : null;
-      avBalance = avResults[3].status === "fulfilled" ? avResults[3].value : null;
-      avCashflow = avResults[4].status === "fulfilled" ? avResults[4].value : null;
-      if (avQuote) source.quote = "alphavantage";
-      if (avIncome && avIncome.annualReports && avIncome.annualReports.length) source.financials = "alphavantage";
-      if (avCashflow && avCashflow.annualReports && avCashflow.annualReports.length) source.cashflow = "alphavantage";
+    // ---- 2. FMP, only when Finnhub didn't have this ticker at all ----
+    // (keeps FMP's tight daily quota almost untouched in the normal case)
+    var fmp = { profile: null, quote: null, incomeArr: [], balanceCur: null, cashflowCur: null, peers: [], errors: [] };
+    var finnhubMissing = !fh.profile || !fh.quote;
+    if (finnhubMissing && fmpKey) {
+      fmp = await fetchFmp(ticker, fmpKey);
+      if (!source.quote || source.quote === "none") source.quote = fmp.quote ? "fmp" : "none";
+      if (fmp.incomeArr.length) source.financials = source.financials === "none" ? "fmp" : source.financials;
+      if (fmp.cashflowCur) source.cashflow = "fmp";
     }
 
-    // Only now, after BOTH providers have had a real shot, give up -- and
-    // say exactly what each one said, so the actual cause (bad key, plan
-    // doesn't cover this endpoint, quota hit) is visible instead of guessed at.
-    if (!profile && !quote && !avOverview && !avQuote) {
-      var fmpProfileErr = fmpResults[0].status === "rejected" ? fmpResults[0].reason.message : "no data";
-      var fmpQuoteErr = fmpResults[1].status === "rejected" ? fmpResults[1].reason.message : "no data";
-      var avNote = avKey ? "" : " Alpha Vantage key isn't set, so there was no fallback to try.";
+    // ---- 3. Alpha Vantage, last resort for whatever's still missing ----
+    var av = { overview: null, quote: null, incomeArr: [], balCur: null, cfCur: null };
+    var stillNeed = {
+      profile: !fh.profile && !fmp.profile,
+      quote: !fh.quote && !fmp.quote,
+      income: !fh.metric && !fmp.incomeArr.length,
+      balance: !fmp.balanceCur,
+      cashflow: !fmp.cashflowCur,
+    };
+    if (avKey && (stillNeed.profile || stillNeed.quote || stillNeed.income || stillNeed.balance || stillNeed.cashflow)) {
+      av = await fetchAv(ticker, avKey, stillNeed);
+      if (av.quote && source.quote === "none") source.quote = "alphavantage";
+      if (av.incomeArr.length && source.financials === "none") source.financials = "alphavantage";
+      if (av.cfCur) source.cashflow = "alphavantage";
+    }
+
+    // Give up only once Finnhub, FMP and Alpha Vantage have all had a shot.
+    if (!fh.profile && !fh.quote && !fmp.profile && !fmp.quote && !av.overview && !av.quote) {
+      var bits = [];
+      if (finnhubKey) bits.push("Finnhub: " + (fh.errors.filter(Boolean)[0] || "no data for this symbol") + ".");
+      else bits.push("Finnhub key isn't set.");
+      if (fmpKey) bits.push("FMP: " + (fmp.errors.filter(Boolean)[0] || "no data for this symbol") + ".");
+      else bits.push("FMP key isn't set.");
+      bits.push(avKey ? "Alpha Vantage also came back empty." : "Alpha Vantage key isn't set either.");
       res.status(502).json({
-        error: "Couldn't get data for " + ticker + " from either provider. FMP profile: " + fmpProfileErr + ". FMP quote: " + fmpQuoteErr + "." + avNote
-          + " This is almost always an API key or quota problem on the provider's side, not a bug in this app -- check your FMP dashboard's usage/plan page.",
+        error: "Couldn't get data for " + ticker + " from any provider. " + bits.join(" ")
+          + " If this happens for every ticker, it's almost always an API key or quota problem -- check each provider's dashboard.",
       });
       return;
     }
 
-    var avIncomeArr = (avIncome && avIncome.annualReports) || [];
-    var avBalanceArr = (avBalance && avBalance.annualReports) || [];
-    var avCashflowArr = (avCashflow && avCashflow.annualReports) || [];
-    var avGlobalQuote = avQuote && avQuote["Global Quote"];
+    var avGlobalQuote = av.quote && av.quote["Global Quote"];
+    var avIncCur = av.incomeArr[0] || null, avIncPrior = av.incomeArr[1] || null;
 
-    // ---- core identity fields ----
-    var name = pick(profile, ["companyName", "name"]) || pick(avOverview, ["Name"]) || ticker;
-    var industry = pick(profile, ["industry"]) || pick(avOverview, ["Industry"]) || "Unsorted";
-    var sector = pick(profile, ["sector"]) || pick(avOverview, ["Sector"]);
-    var description = pick(profile, ["description"]) || pick(avOverview, ["Description"]);
-    var logo = pick(profile, ["image"]);
+    // ---- core identity ----
+    var name = pick(fh.profile, ["name"]) || pick(fmp.profile, ["companyName", "name"]) || pick(av.overview, ["Name"]) || ticker;
+    var industry = pick(fh.profile, ["finnhubIndustry"]) || pick(fmp.profile, ["industry"]) || pick(av.overview, ["Industry"]) || "Unsorted";
+    var sector = pick(fmp.profile, ["sector"]) || pick(av.overview, ["Sector"]) || null;
+    var description = pick(fmp.profile, ["description"]) || pick(av.overview, ["Description"]) || null; // Finnhub's free profile has no description field
+    var logo = pick(fh.profile, ["logo"]) || pick(fmp.profile, ["image"]);
 
-    var price = num(pick(quote, ["price"])) || num(pick(profile, ["price"])) ||
-                num(pick(avGlobalQuote, ["05. price"])) || num(pick(avOverview, ["AnalystTargetPrice"]));
-    var changePct = num(pick(quote, ["changePercentage"]));
+    var price = num(pick(fh.quote, ["c"])) || num(pick(fmp.quote, ["price"])) || num(pick(fmp.profile, ["price"])) ||
+                num(pick(avGlobalQuote, ["05. price"])) || num(pick(av.overview, ["AnalystTargetPrice"]));
+    var changePct = num(pick(fh.quote, ["dp"])) || num(pick(fmp.quote, ["changePercentage"]));
     if (changePct == null && avGlobalQuote) {
       var avChangePct = pick(avGlobalQuote, ["10. change percent"]);
       if (avChangePct) changePct = num(String(avChangePct).replace("%", ""));
     }
-    var sharesOut = num(pick(quote, ["sharesOutstanding"])) || num(pick(profile, ["sharesOutstanding", "shares"])) ||
-                    num(pick(avOverview, ["SharesOutstanding"]));
-    var marketCapRaw = num(pick(quote, ["marketCap"])) || num(pick(profile, ["mktCap", "marketCap"])) ||
-                        num(pick(avOverview, ["MarketCapitalization"]));
-    var sharesMM = sharesOut ? sharesOut / 1e6 : (marketCapRaw && price ? marketCapRaw / price / 1e6 : null);
+    var sharesOutMM = num(pick(fh.profile, ["shareOutstanding"])); // Finnhub gives this in millions already
+    var sharesOut = num(pick(fmp.quote, ["sharesOutstanding"])) || num(pick(fmp.profile, ["sharesOutstanding", "shares"])) ||
+                    num(pick(av.overview, ["SharesOutstanding"]));
+    var marketCapFhMM = num(pick(fh.profile, ["marketCapitalization"])); // Finnhub gives this in millions already
+    var marketCapRaw = num(pick(fmp.quote, ["marketCap"])) || num(pick(fmp.profile, ["mktCap", "marketCap"])) ||
+                        num(pick(av.overview, ["MarketCapitalization"]));
+    var sharesMM = sharesOutMM || (sharesOut ? sharesOut / 1e6 : null) ||
+                   (marketCapFhMM && price ? marketCapFhMM / price : null) ||
+                   (marketCapRaw && price ? marketCapRaw / price / 1e6 : null);
 
-    // ---- balance sheet (fill any missing piece from AV's most recent annual report) ----
-    var avBalCur = avBalanceArr[0] || null;
-    var totalDebt = num(pick(balanceCur, ["totalDebt"]));
-    if (totalDebt == null && avBalCur) {
-      var std = num(pick(avBalCur, ["shortLongTermDebtTotal", "shortTermDebt"]));
-      var ltd = num(pick(avBalCur, ["longTermDebt"]));
+    // ---- precomputed ratios (Finnhub's `metric`, when we have it) ----
+    var m = fh.metric;
+    var rPe = num(pick(m, ["peTTM", "peBasicExclExtraTTM", "peExclExtraTTM", "peNormalizedAnnual"]));
+    var rEvEbitda = num(pick(m, ["evEbitdaTTM", "evEbitdaAnnual"]));
+    var rGrossMargin = pct100(pick(m, ["grossMarginTTM", "grossMarginAnnual"]));
+    var rOpMargin = pct100(pick(m, ["operatingMarginTTM", "operatingMarginAnnual"]));
+    var rNetMargin = pct100(pick(m, ["netMarginTTM", "netProfitMarginTTM", "netProfitMarginAnnual"]));
+    var rRevGrowth = pct100(pick(m, ["revenueGrowthTTMYoy", "revenueGrowthQuarterlyYoy", "revenueGrowth5Y"]));
+    var rCurrentRatio = num(pick(m, ["currentRatioAnnual", "currentRatioQuarterly"]));
+    // Finnhub's debt/equity, like its margins, comes back as a percent
+    // number (e.g. 145.2 meaning a 1.45x ratio) rather than the plain
+    // multiple -- a raw reading of "145x" would be nonsensical for any real
+    // company, so this is scaled the same way. Flagged in this file's top
+    // comment as the one field worth double-checking against `raw` first.
+    var rDebtToEquity = pct100(pick(m, ["totalDebt/totalEquityAnnual", "debtToEquityAnnual", "totalDebt/totalEquityQuarterly"]));
+
+    // ---- balance sheet dollar figures (FMP/AV only -- Finnhub's free tier doesn't give raw statements) ----
+    var totalDebt = num(pick(fmp.balanceCur, ["totalDebt"]));
+    if (totalDebt == null && av.balCur) {
+      var std = num(pick(av.balCur, ["shortLongTermDebtTotal", "shortTermDebt"]));
+      var ltd = num(pick(av.balCur, ["longTermDebt"]));
       totalDebt = (std != null || ltd != null) ? (std || 0) + (ltd || 0) : null;
     }
-    var cash = num(pick(balanceCur, ["cashAndCashEquivalents", "cashAndShortTermInvestments"])) ||
-               num(pick(avBalCur, ["cashAndCashEquivalentsAtCarryingValue", "cashAndShortTermInvestments"]));
-    var currentAssets = num(pick(balanceCur, ["totalCurrentAssets"])) || num(pick(avBalCur, ["totalCurrentAssets"]));
-    var currentLiabilities = num(pick(balanceCur, ["totalCurrentLiabilities"])) || num(pick(avBalCur, ["totalCurrentLiabilities"]));
-    var totalEquity = num(pick(balanceCur, ["totalStockholdersEquity", "totalEquity"])) || num(pick(avBalCur, ["totalShareholderEquity"]));
+    var cash = num(pick(fmp.balanceCur, ["cashAndCashEquivalents", "cashAndShortTermInvestments"])) ||
+               num(pick(av.balCur, ["cashAndCashEquivalentsAtCarryingValue", "cashAndShortTermInvestments"]));
+    var currentAssets = num(pick(fmp.balanceCur, ["totalCurrentAssets"])) || num(pick(av.balCur, ["totalCurrentAssets"]));
+    var currentLiabilities = num(pick(fmp.balanceCur, ["totalCurrentLiabilities"])) || num(pick(av.balCur, ["totalCurrentLiabilities"]));
+    var totalEquity = num(pick(fmp.balanceCur, ["totalStockholdersEquity", "totalEquity"])) || num(pick(av.balCur, ["totalShareholderEquity"]));
 
-    // ---- income statement, current + prior ----
-    var avIncCur = avIncomeArr[0] || null, avIncPrior = avIncomeArr[1] || null;
+    // ---- income statement dollar figures, current + prior (FMP/AV only) ----
+    var incomeCur = fmp.incomeArr[0] || null, incomePrior = fmp.incomeArr[1] || null;
     var revenueCur = num(pick(incomeCur, ["revenue"])) || num(pick(avIncCur, ["totalRevenue"]));
     var revenuePrior = num(pick(incomePrior, ["revenue"])) || num(pick(avIncPrior, ["totalRevenue"]));
     var grossProfitCur = num(pick(incomeCur, ["grossProfit"])) || num(pick(avIncCur, ["grossProfit"]));
@@ -221,41 +315,33 @@ module.exports = async function handler(req, res) {
     var ebitdaCur = num(pick(incomeCur, ["ebitda"])) || num(pick(avIncCur, ["ebitda"]));
     var netIncomeCur = num(pick(incomeCur, ["netIncome"])) || num(pick(avIncCur, ["netIncome"]));
     var netIncomePrior = num(pick(incomePrior, ["netIncome"])) || num(pick(avIncPrior, ["netIncome"]));
-    var epsCur = num(pick(incomeCur, ["epsDiluted", "eps"])) || num(pick(avOverview, ["DilutedEPSTTM", "EPS"]));
+    var epsCur = num(pick(incomeCur, ["epsDiluted", "eps"])) || num(pick(av.overview, ["DilutedEPSTTM", "EPS"]));
     var epsPrior = num(pick(incomePrior, ["epsDiluted", "eps"]));
 
-    // ---- cash flow (for free cash flow / quality-of-earnings) ----
-    var avCfCur = avCashflowArr[0] || null;
-    var operatingCashFlow = num(pick(cashflowCur, ["operatingCashFlow", "netCashProvidedByOperatingActivities"])) ||
-                             num(pick(avCfCur, ["operatingCashflow"]));
-    var capex = num(pick(cashflowCur, ["capitalExpenditure"]));
-    if (capex == null && avCfCur) capex = num(pick(avCfCur, ["capitalExpenditures"]));
-    var freeCashFlow = num(pick(cashflowCur, ["freeCashFlow"]));
+    // ---- cash flow (FMP/AV only) ----
+    var operatingCashFlow = num(pick(fmp.cashflowCur, ["operatingCashFlow", "netCashProvidedByOperatingActivities"])) ||
+                             num(pick(av.cfCur, ["operatingCashflow"]));
+    var capex = num(pick(fmp.cashflowCur, ["capitalExpenditure"]));
+    if (capex == null && av.cfCur) capex = num(pick(av.cfCur, ["capitalExpenditures"]));
+    var freeCashFlow = num(pick(fmp.cashflowCur, ["freeCashFlow"]));
     if (freeCashFlow == null && operatingCashFlow != null && capex != null) {
       freeCashFlow = operatingCashFlow - Math.abs(capex);
     }
 
-    // ---- multi-year revenue/net-income history, oldest to newest ----
+    // ---- multi-year revenue/net-income history (FMP/AV only -- not available from Finnhub's free tier) ----
     var history = [];
-    if (incomeArr.length) {
-      history = incomeArr.map(function (r) {
+    if (fmp.incomeArr.length) {
+      history = fmp.incomeArr.map(function (r) {
         return { year: (pick(r, ["date", "calendarYear"]) || "").toString().slice(0, 4), revenue: num(pick(r, ["revenue"])), netIncome: num(pick(r, ["netIncome"])) };
       }).filter(function (r) { return r.year; }).reverse();
-    } else if (avIncomeArr.length) {
-      history = avIncomeArr.map(function (r) {
+    } else if (av.incomeArr.length) {
+      history = av.incomeArr.map(function (r) {
         return { year: (pick(r, ["fiscalDateEnding"]) || "").toString().slice(0, 4), revenue: num(pick(r, ["totalRevenue"])), netIncome: num(pick(r, ["netIncome"])) };
       }).filter(function (r) { return r.year; }).reverse();
     }
     history = history.map(function (r) { return { year: r.year, revenue: mm(r.revenue), netIncome: mm(r.netIncome) }; });
 
-    var peers = [];
-    if (Array.isArray(peersData) && peersData[0] && Array.isArray(peersData[0].peersList)) {
-      peers = peersData[0].peersList;
-    } else if (peersData && Array.isArray(peersData.peersList)) {
-      peers = peersData.peersList;
-    } else if (Array.isArray(peersData)) {
-      peers = peersData.map(function (p) { return (typeof p === "string") ? p : (p && p.symbol); }).filter(Boolean);
-    }
+    var peers = (fh.peers && fh.peers.length ? fh.peers : fmp.peers) || [];
 
     var payload = {
       ticker: ticker,
@@ -287,8 +373,19 @@ module.exports = async function handler(req, res) {
       history: history,
       peers: peers.slice(0, 6),
       dataSource: source,
+      // Precomputed ratios, preferred by the frontend over deriving from the
+      // dollar figures above when present (Finnhub's free tier gives these
+      // directly, without needing full financial statements).
+      ratios: {
+        pe: rPe, evEbitda: rEvEbitda, grossMargin: rGrossMargin, opMargin: rOpMargin,
+        netMargin: rNetMargin, revGrowth: rRevGrowth, currentRatio: rCurrentRatio, debtToEquity: rDebtToEquity,
+      },
       fetchedAt: Date.now(),
-      raw: { profile: profile, quote: quote, income: incomeArr, balance: balanceCur, cashflow: cashflowCur, peers: peersData, avOverview: avOverview, avQuote: avQuote, avIncome: avIncomeArr, avBalance: avBalCur, avCashflow: avCfCur },
+      raw: {
+        finnhubProfile: fh.profile, finnhubQuote: fh.quote, finnhubMetric: m, finnhubPeers: fh.peers,
+        fmpProfile: fmp.profile, fmpQuote: fmp.quote, fmpIncome: fmp.incomeArr, fmpBalance: fmp.balanceCur, fmpCashflow: fmp.cashflowCur,
+        avOverview: av.overview, avQuote: av.quote, avIncome: av.incomeArr, avBalance: av.balCur, avCashflow: av.cfCur,
+      },
     };
     cacheSet(ticker, payload);
     res.status(200).json(payload);
